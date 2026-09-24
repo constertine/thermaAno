@@ -1,0 +1,19 @@
+services:
+  # Web Service (Express API + WebSocket Live Stream + React SPA Frontend)
+  - type: web
+    name: thermal-intelligence-platform
+    env: node
+    plan: standard
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: NASA_FIRMS_MAP_KEY
+        sync: false
+      - key: ML_PREDICTION_API_URL
+        value: https://thermal-anomaly-api.onrender.com/predict
