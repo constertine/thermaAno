@@ -374,6 +374,8 @@ export default function ThermalMap({ events = [], height = '540px', onSelectEven
           align-items: center;
           gap: 0.75rem;
           flex-wrap: wrap;
+        }
+
         .map-mode-toggle-group {
           display: flex;
           background: var(--page-bg);

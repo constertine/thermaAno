@@ -241,35 +241,37 @@ export function classifyEventType(item) {
 
 // Compute dynamic Risk Score (0 - 100) & Severity Category
 export function calculateRisk(item) {
-    const frp = parseFloat(item.frp) || 0;
+    const frp = parseFloat(item.frp || item.max_frp || 0);
     const dist = parseFloat(item.dist_to_facility_m) || 30000;
-    const bright = parseFloat(item.bright_ti4) || 300;
+    const bright = parseFloat(item.bright_ti4 || item.brightness || 300);
     const conf = (item.confidence || "").toLowerCase();
 
-    let baseScore = 30;
+    let baseScore = 8;
 
-    // FRP impact (0-40 pts)
-    baseScore += Math.min(40, frp * 1.5);
+    // FRP impact (0-45 pts)
+    baseScore += Math.min(45, frp * 1.5);
 
-    // Proximity impact (< 2000m = +20 pts, < 5000m = +10 pts)
+    // Proximity impact (< 2000m = +20 pts, < 5000m = +12 pts)
     if (dist < 2000) baseScore += 20;
     else if (dist < 5000) baseScore += 12;
     else if (dist < 10000) baseScore += 5;
 
     // Brightness impact (above 330K)
-    if (bright > 340) baseScore += 15;
-    else if (bright > 330) baseScore += 8;
+    if (bright > 355) baseScore += 18;
+    else if (bright > 340) baseScore += 10;
+    else if (bright > 330) baseScore += 4;
 
     // Confidence impact
-    if (conf === "h" || conf === "high") baseScore += 10;
-    else if (conf === "n" || conf === "nominal") baseScore += 5;
+    if (conf === "h" || conf === "high" || conf.includes(">90")) baseScore += 8;
+    else if (conf === "n" || conf === "nominal") baseScore += 4;
 
-    const finalScore = Math.min(99, Math.max(12, Math.round(baseScore)));
+    const finalScore = Math.min(99, Math.max(10, Math.round(baseScore)));
 
     let riskCategory = "LOW";
     if (finalScore >= 75) riskCategory = "CRITICAL";
     else if (finalScore >= 50) riskCategory = "HIGH";
     else if (finalScore >= 25) riskCategory = "MEDIUM";
+    else riskCategory = "LOW";
 
     return { riskScore: finalScore, risk: riskCategory };
 }
@@ -289,16 +291,27 @@ export function formatConfidence(conf) {
 
 // Normalize a single raw record
 export function normalizeEvent(item, index) {
-    const computedClass = item.predicted_class || classifyEventType(item);
+    const rawClass = item.predicted_class || classifyEventType(item);
     const eventType = item.eventType || (
-        computedClass.includes("Agricultural") ? "Agricultural" :
-        computedClass.includes("Forest") ? "Forest" :
-        computedClass.includes("Power") ? "Power Plant" :
-        computedClass.includes("Flare") || computedClass.includes("Gas") ? "Gas Flare" :
-        computedClass.includes("Mining") || computedClass.includes("Quarry") ? "Mining" :
-        computedClass === "Industrial" ? "Industrial" :
+        rawClass.includes("Agricultural") ? "Agricultural" :
+        rawClass.includes("Forest") ? "Forest" :
+        rawClass.includes("Power") ? "Power Plant" :
+        rawClass.includes("Flare") || rawClass.includes("Gas") ? "Gas Flare" :
+        rawClass.includes("Mining") || rawClass.includes("Quarry") ? "Mining" :
+        rawClass === "Industrial" ? "Industrial" :
         classifyEventType(item)
     );
+
+    const predictedClass = (item.predicted_class && item.predicted_class !== "Other" && item.predicted_class !== "Unknown")
+        ? item.predicted_class
+        : (
+            eventType === "Agricultural" ? "Agricultural Burning" :
+            eventType === "Forest" ? "Forest Wildfire" :
+            eventType === "Power Plant" ? "Power Plant Discharge" :
+            eventType === "Gas Flare" ? "Petroleum Gas Flare" :
+            eventType === "Mining" ? "Mining / Quarry Extraction" :
+            "Industrial Infrastructure"
+        );
 
     const lat = parseFloat(item.latitude);
     const lon = parseFloat(item.longitude);
@@ -379,6 +392,13 @@ export function normalizeEvent(item, index) {
         `High-temperature industrial thermal anomaly (FRP: ${parseFloat(item.frp || 10).toFixed(1)} MW, Brightness: ${bright4.toFixed(1)} K) in ${state}.`
     );
 
+    // Format time cleanly as HH:MM
+    let rawTime = String(item.acq_time || (item.event_start ? item.event_start.split(" ")[1]?.slice(0, 5) : '12:00')).trim();
+    if (!rawTime.includes(':') && rawTime.length <= 4) {
+        const padded = rawTime.padStart(4, '0');
+        rawTime = `${padded.slice(0, 2)}:${padded.slice(2, 4)}`;
+    }
+
     return {
         ...item,
         id: firmsId,
@@ -393,11 +413,7 @@ export function normalizeEvent(item, index) {
         acq_date:
             item.acq_date ||
             (item.event_start ? item.event_start.split(" ")[0] : new Date().toISOString().split('T')[0]),
-        acq_time:
-            item.acq_time ||
-            (item.event_start
-                ? item.event_start.split(" ")[1]?.slice(0, 5)
-                : '12:00'),
+        acq_time: rawTime,
         daynight: item.daynight || "D",
         satellite:
             item.satellite ||
@@ -416,7 +432,7 @@ export function normalizeEvent(item, index) {
         dist_to_facility_m: distM,
         dist_to_facility_km: distKm,
         eventType,
-        predicted_class: computedClass,
+        predicted_class: predictedClass,
         prediction_confidence: parseFloat(item.prediction_confidence || 88),
         risk,
         riskScore,
@@ -428,7 +444,7 @@ export function normalizeEvent(item, index) {
                 ? "CRITICAL ALERT"
                 : risk === "HIGH"
                   ? "UNDER INVESTIGATION"
-                  : "MONITORED"),
+                  : "ACTIVE MONITORING"),
         persistence:
             item.persistence != null
                 ? item.persistence
@@ -458,7 +474,6 @@ export function normalizeEvent(item, index) {
         dist_quarry_km: item.dist_quarry_km != null ? parseFloat(item.dist_quarry_km) : null,
         dist_brick_kiln_km: item.dist_brick_kiln_km != null ? parseFloat(item.dist_brick_kiln_km) : null,
         dist_oil_gas_km: item.dist_oil_gas_km != null ? parseFloat(item.dist_oil_gas_km) : null,
-        landcover_class: item.landcover_class || null,
         ndvi_proxy: item.ndvi_proxy != null ? parseFloat(item.ndvi_proxy) : null,
         ndbi_proxy: item.ndbi_proxy != null ? parseFloat(item.ndbi_proxy) : null,
         landcover_probabilities: item.landcover_probabilities || null,
