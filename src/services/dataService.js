@@ -484,12 +484,12 @@ export async function loadEventsData() {
             }
         }
 
-        // 2. Fetch Active Live Real Satellite Stream (from NASA FIRMS)
+        // 2. Fetch Active Live Real Satellite Stream (from Backend or Direct NASA FIRMS)
         try {
             const liveRes = await fetch(`${API_BASE_URL}/api/events/live?limit=500`);
             if (liveRes.ok) {
                 const liveData = await liveRes.json();
-                if (liveData.success && Array.isArray(liveData.events)) {
+                if (liveData.success && Array.isArray(liveData.events) && liveData.events.length > 0) {
                     liveList = liveData.events.map((item, idx) => ({
                         ...normalizeEvent(item, idx),
                         is_live: true
@@ -497,7 +497,63 @@ export async function loadEventsData() {
                 }
             }
         } catch (e) {
-            console.log("ℹ️ Live API unreachable, live list starts clean.", e.message);
+            console.log("ℹ️ Backend Live API unreachable, attempting direct NASA FIRMS satellite query...", e.message);
+        }
+
+        // Direct NASA FIRMS NRT Satellite pull if backend API was offline or returned 0 live events
+        if (liveList.length === 0) {
+            try {
+                const firmsKey = "6694b687df676df8522d2acc36064495";
+                const bbox = "68.0,6.5,97.5,37.0";
+                const feeds = [
+                    { name: 'VIIRS_NOAA21_NRT', sat: 'VIIRS (NOAA-21 375m)' },
+                    { name: 'VIIRS_NOAA20_NRT', sat: 'VIIRS (NOAA-20 375m)' },
+                    { name: 'VIIRS_SNPP_NRT', sat: 'VIIRS (Suomi-NPP 375m)' },
+                    { name: 'MODIS_NRT', sat: 'MODIS (Terra/Aqua 1km)' }
+                ];
+
+                const directEvents = [];
+                for (const feed of feeds) {
+                    try {
+                        const url = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${firmsKey}/${feed.name}/${bbox}/1`;
+                        const res = await fetch(url);
+                        if (res.ok) {
+                            const csvText = await res.text();
+                            if (csvText.includes('latitude')) {
+                                const parsed = Papa.parse(csvText, { header: true, dynamicTyping: true });
+                                parsed.data.filter(r => r.latitude && r.longitude).forEach((row, rIdx) => {
+                                    directEvents.push({
+                                        id: `EVT-LIVE-${feed.name}-${rIdx + 1}`,
+                                        eventId: `EVT-LIVE-${feed.name}-${rIdx + 1}`,
+                                        latitude: parseFloat(row.latitude),
+                                        longitude: parseFloat(row.longitude),
+                                        bright_ti4: parseFloat(row.bright_ti4 || row.brightness || 330),
+                                        bright_ti5: parseFloat(row.bright_ti5 || row.bright_t31 || 290),
+                                        frp: parseFloat(row.frp || 12.0),
+                                        satellite: feed.sat,
+                                        confidence: String(row.confidence || 'nominal'),
+                                        acq_date: row.acq_date || new Date().toISOString().split('T')[0],
+                                        acq_time: String(row.acq_time || '1200'),
+                                        is_live: true
+                                    });
+                                });
+                            }
+                        }
+                    } catch (feedErr) {
+                        console.warn(`Direct feed notice for ${feed.name}:`, feedErr.message);
+                    }
+                }
+
+                if (directEvents.length > 0) {
+                    liveList = directEvents.map((item, idx) => ({
+                        ...normalizeEvent(item, idx),
+                        is_live: true
+                    }));
+                    console.log(`✅ Loaded ${liveList.length} live satellite detections directly from NASA FIRMS.`);
+                }
+            } catch (err) {
+                console.warn('Direct NASA FIRMS fallback notice:', err.message);
+            }
         }
 
         // Combine live real detections at the head + baseline dataset
@@ -508,23 +564,66 @@ export async function loadEventsData() {
     return fetchPromise;
 }
 
-// Trigger Manual Immediate Re-sync from Satellite Ingestion API
+// Trigger Manual Immediate Re-sync from Satellite Ingestion API (or direct NASA FIRMS)
 export async function triggerLiveSync() {
     try {
         const res = await fetch(`${API_BASE_URL}/api/events/sync-live`, { method: 'POST' });
         if (res.ok) {
             const data = await res.json();
-            if (data.success && Array.isArray(data.events)) {
+            if (data.success && Array.isArray(data.events) && data.events.length > 0) {
                 const normalizedLive = data.events.map((e, idx) => ({ ...normalizeEvent(e, idx), is_live: true }));
-                // Update memory cache
                 const baseline = (cachedEvents || []).filter(e => !isEventLive(e));
                 cachedEvents = [...normalizedLive, ...baseline];
                 return { success: true, count: normalizedLive.length, events: cachedEvents };
             }
         }
     } catch (err) {
-        console.warn('Manual live sync notice:', err.message);
+        console.warn('Backend live sync unreachable, attempting direct NASA FIRMS sync...');
     }
+
+    // Direct client-side sync fallback
+    try {
+        const firmsKey = "6694b687df676df8522d2acc36064495";
+        const bbox = "68.0,6.5,97.5,37.0";
+        const feeds = ['VIIRS_NOAA21_NRT', 'VIIRS_NOAA20_NRT', 'VIIRS_SNPP_NRT', 'MODIS_NRT'];
+        const directEvents = [];
+
+        for (const feedName of feeds) {
+            try {
+                const res = await fetch(`https://firms.modaps.eosdis.nasa.gov/api/area/csv/${firmsKey}/${feedName}/${bbox}/1`);
+                if (res.ok) {
+                    const text = await res.text();
+                    if (text.includes('latitude')) {
+                        const parsed = Papa.parse(text, { header: true, dynamicTyping: true });
+                        parsed.data.filter(r => r.latitude && r.longitude).forEach((row, rIdx) => {
+                            directEvents.push({
+                                id: `EVT-LIVE-${feedName}-${rIdx + 1}`,
+                                eventId: `EVT-LIVE-${feedName}-${rIdx + 1}`,
+                                latitude: parseFloat(row.latitude),
+                                longitude: parseFloat(row.longitude),
+                                bright_ti4: parseFloat(row.bright_ti4 || row.brightness || 330),
+                                bright_ti5: parseFloat(row.bright_ti5 || row.bright_t31 || 290),
+                                frp: parseFloat(row.frp || 12.0),
+                                satellite: feedName.includes('MODIS') ? 'MODIS (Terra/Aqua 1km)' : 'VIIRS (375m)',
+                                confidence: String(row.confidence || 'nominal'),
+                                acq_date: row.acq_date || new Date().toISOString().split('T')[0],
+                                acq_time: String(row.acq_time || '1200'),
+                                is_live: true
+                            });
+                        });
+                    }
+                }
+            } catch (e) {}
+        }
+
+        if (directEvents.length > 0) {
+            const normalizedLive = directEvents.map((e, idx) => ({ ...normalizeEvent(e, idx), is_live: true }));
+            const baseline = (cachedEvents || []).filter(e => !isEventLive(e));
+            cachedEvents = [...normalizedLive, ...baseline];
+            return { success: true, count: normalizedLive.length, events: cachedEvents };
+        }
+    } catch (e) {}
+
     return { success: false, events: cachedEvents || [] };
 }
 
