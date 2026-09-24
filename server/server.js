@@ -101,12 +101,8 @@ app.get('/api/events/live', async (req, res) => {
   try {
     let liveEvents = ingestionService.getLiveEvents();
     if (liveEvents.length === 0) {
-      await ingestionService.loadRecentEventsFromDb();
+      await ingestionService.syncAllLiveSatellites(false);
       liveEvents = ingestionService.getLiveEvents();
-      if (liveEvents.length === 0) {
-        await ingestionService.syncAllLiveSatellites(false);
-        liveEvents = ingestionService.getLiveEvents();
-      }
     }
     res.json({
       success: true,

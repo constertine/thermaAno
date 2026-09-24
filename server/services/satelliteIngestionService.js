@@ -33,59 +33,20 @@ export class SatelliteIngestionService {
     console.log('🔄 Live stream reset to 0.');
   }
 
-  async loadRecentEventsFromDb() {
-    try {
-      const res = await query(`
-        SELECT * FROM thermal_events
-        WHERE event_id LIKE 'EVT-LIVE-%' OR created_at >= NOW() - INTERVAL '24 hours'
-        ORDER BY created_at DESC
-        LIMIT 500;
-      `);
-      if (res && res.rows && res.rows.length > 0) {
-        const loaded = res.rows.map(r => ({
-          ...r,
-          id: r.id,
-          eventId: r.event_id,
-          latitude: parseFloat(r.latitude),
-          longitude: parseFloat(r.longitude),
-          frp: parseFloat(r.frp),
-          bright_ti4: parseFloat(r.bright_ti4),
-          bright_ti5: parseFloat(r.bright_ti5),
-          riskScore: parseFloat(r.risk_score || 50),
-          state: r.state,
-          facilityName: r.facility_name,
-          facilityType: r.facility_type,
-          eventType: r.event_type,
-          is_live: true
-        }));
-        this.liveSessionEvents = loaded;
-        loaded.forEach(e => {
-          this.processedEvents.add(`${e.latitude.toFixed(3)}_${e.longitude.toFixed(3)}_${e.acq_date}_${e.acq_time}`);
-        });
-        console.log(`💾 Loaded ${loaded.length} recent live satellite events from database.`);
-      }
-    } catch (err) {
-      console.warn('DB load notice:', err.message);
-    }
-  }
-
   async start() {
     if (this.isRunning) return;
     this.isRunning = true;
     console.log('🛰️ Live Real-World Satellite Ingestion Active (NASA FIRMS VIIRS NOAA-21/20 + SNPP + MODIS)...');
 
-    // 1. Pre-populate from database if available (prevents 0 count on cold start)
-    await this.loadRecentEventsFromDb();
+    // 1. Initial Live Data Pull from all active NASA FIRMS satellite sensors across India
+    await this.syncAllLiveSatellites(false).catch(err => console.warn('Initial satellite sync notice:', err.message));
 
-    // 2. Initial Live Data Pull from all active satellite sensors
-    this.syncAllLiveSatellites(false).catch(err => console.warn('Initial satellite sync notice:', err.message));
-
-    // 3. Poll live NASA FIRMS feeds every 10 minutes (matching NASA NRT orbital swath cadence)
+    // 2. Poll live NASA FIRMS feeds every 10 minutes (matching NASA NRT orbital swath cadence)
     setInterval(() => {
       this.syncAllLiveSatellites(false).catch(err => console.warn('Periodic satellite sync notice:', err.message));
     }, 10 * 60 * 1000);
 
-    // 4. Purge obsolete records older than 30 days once every 6 hours
+    // 3. Purge obsolete records older than 30 days once every 6 hours
     setInterval(() => {
       this.purgeExpiredRecords().catch(err => console.warn('30-day purge notice:', err.message));
     }, 6 * 60 * 60 * 1000);
