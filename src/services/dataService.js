@@ -548,7 +548,19 @@ export function subscribeToLiveStream(onNewEvent, onAlert) {
             ws.onmessage = (event) => {
                 try {
                     const message = JSON.parse(event.data);
-                    if (message.type === "NEW_THERMAL_EVENT" && message.data) {
+                    if (message.type === "INITIAL_LIVE_EVENTS" && Array.isArray(message.data) && message.data.length > 0) {
+                        const normalizedList = message.data.map((e, idx) => ({
+                            ...normalizeEvent(e, idx),
+                            is_live: true
+                        }));
+                        if (cachedEvents) {
+                            const baseline = cachedEvents.filter(e => !isEventLive(e));
+                            cachedEvents = [...normalizedList, ...baseline];
+                        }
+                        normalizedList.forEach(e => {
+                            if (onNewEvent) onNewEvent(e);
+                        });
+                    } else if (message.type === "NEW_THERMAL_EVENT" && message.data) {
                         const normalized = normalizeEvent(message.data, 0);
 
                         // Prepend to memory cache

@@ -32,11 +32,21 @@ wss.on('connection', (ws) => {
   console.log(`🔌 WebSocket client connected. Total clients: ${clients.size}`);
 
   // Send initial welcome & connection ack
+  const currentLive = ingestionService.getLiveEvents();
   ws.send(JSON.stringify({
     type: 'CONNECTION_ACK',
     message: 'Connected to Multi-Satellite Thermal Intelligence Live Stream (INSAT-3DR + Himawari-9 + VIIRS)',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    liveCount: currentLive.length
   }));
+
+  // Immediately push all active live satellite events to the freshly connected client
+  if (currentLive.length > 0) {
+    ws.send(JSON.stringify({
+      type: 'INITIAL_LIVE_EVENTS',
+      data: currentLive
+    }));
+  }
 
   ws.on('close', () => {
     clients.delete(ws);
@@ -89,7 +99,15 @@ app.get('/api/health', async (req, res) => {
 // 2. Get Live Real-Time Stream Events (Active Session / Real NASA FIRMS NRT)
 app.get('/api/events/live', async (req, res) => {
   try {
-    const liveEvents = ingestionService.getLiveEvents();
+    let liveEvents = ingestionService.getLiveEvents();
+    if (liveEvents.length === 0) {
+      await ingestionService.loadRecentEventsFromDb();
+      liveEvents = ingestionService.getLiveEvents();
+      if (liveEvents.length === 0) {
+        await ingestionService.syncAllLiveSatellites(false);
+        liveEvents = ingestionService.getLiveEvents();
+      }
+    }
     res.json({
       success: true,
       count: liveEvents.length,
