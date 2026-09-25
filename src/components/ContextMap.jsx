@@ -1,166 +1,260 @@
-import React, { useState } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup, Circle } from 'react-leaflet';
-import { Flame, Layers } from 'lucide-react';
-import { getMarkerRiskProps } from '../services/dataService';
+import React, { useState, useEffect } from 'react';
+import { MapContainer, TileLayer, CircleMarker, Circle, Popup, useMap } from 'react-leaflet';
+import { Flame, Maximize2, Minimize2, Radio, Layers } from 'lucide-react';
+import { getMarkerRiskProps, getEventCategoryColor } from '../services/dataService';
 
-export default function ContextMap({ event, height = '360px' }) {
-  const [mapLayer, setMapLayer] = useState('satellite');
+// Map controller to smoothly pan/zoom to the exact coordinate
+function MapPanController({ center, zoom }) {
+  const map = useMap();
+  useEffect(() => {
+    if (center && zoom) {
+      map.setView(center, zoom, { animate: true });
+    }
+  }, [center, zoom, map]);
+  return null;
+}
+
+export default function ContextMap({ event, height = '300px' }) {
+  const [mapLayer, setMapLayer] = useState('satellite'); // 'satellite' | 'dark' | 'standard'
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   if (!event) return null;
 
+  const lat = Number(event.latitude);
+  const lon = Number(event.longitude);
+  const markerProps = getMarkerRiskProps(event, 15);
+  const categoryColor = getEventCategoryColor(event);
+
   const tileUrls = {
     satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    standard: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
   };
 
   return (
-    <div className="context-map-wrapper" style={{ height }}>
-      <div className="context-map-header">
-        <div className="context-title">
+    <div className={`clean-context-map-container ${isFullscreen ? 'fullscreen-mode' : ''}`} style={{ height: isFullscreen ? '100vh' : height }}>
+      {/* Top Sleek Controls Bar */}
+      <div className="context-header-bar">
+        <div className="header-left">
           <Flame size={14} className="text-thermal" />
-          <span className="mono">GIS CONTEXT MAP — LAT: {event.latitude} | LON: {event.longitude}</span>
+          <span className="mono location-title">
+            HIGH-RES SATELLITE VIEW &middot; {lat.toFixed(4)}°N, {lon.toFixed(4)}°E
+          </span>
         </div>
-        <div className="context-layer-toggle">
+
+        <div className="header-right">
+          <div className="layer-pill-group">
+            <button
+              className={`layer-pill ${mapLayer === 'satellite' ? 'active' : ''}`}
+              onClick={() => setMapLayer('satellite')}
+            >
+              Satellite
+            </button>
+            <button
+              className={`layer-pill ${mapLayer === 'dark' ? 'active' : ''}`}
+              onClick={() => setMapLayer('dark')}
+            >
+              Dark
+            </button>
+            <button
+              className={`layer-pill ${mapLayer === 'standard' ? 'active' : ''}`}
+              onClick={() => setMapLayer('standard')}
+            >
+              Street
+            </button>
+          </div>
+
           <button
-            className={`layer-btn ${mapLayer === 'satellite' ? 'active' : ''}`}
-            onClick={() => setMapLayer('satellite')}
+            className="btn-fullscreen-toggle"
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            title={isFullscreen ? 'Exit Fullscreen' : 'Expand Fullscreen'}
           >
-            Satellite
-          </button>
-          <button
-            className={`layer-btn ${mapLayer === 'dark' ? 'active' : ''}`}
-            onClick={() => setMapLayer('dark')}
-          >
-            Dark Vector
+            {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
           </button>
         </div>
       </div>
 
+      {/* Map Viewport */}
       <MapContainer
-        center={[event.latitude, event.longitude]}
-        zoom={12}
-        scrollWheelZoom={false}
-        style={{ width: '100%', height: 'calc(100% - 36px)', background: 'var(--page-bg)' }}
+        center={[lat, lon]}
+        zoom={15}
+        scrollWheelZoom={true}
+        zoomControl={true}
+        style={{ width: '100%', height: 'calc(100% - 36px)', background: '#0f172a' }}
       >
+        <MapPanController center={[lat, lon]} zoom={15} />
+
         <TileLayer
-          attribution='&copy; ESRI Satellite &copy; VIIRS'
+          attribution='Imagery &copy; Esri, Maxar, Earthstar Geographics'
           url={tileUrls[mapLayer]}
-          maxZoom={18}
+          maxZoom={19}
         />
 
-        {/* Outer 5km Radius Thermal Buffer Zone */}
+        {/* 500m Immediate Thermal Impact Zone */}
         <Circle
-          center={[event.latitude, event.longitude]}
-          radius={5000}
+          center={[lat, lon]}
+          radius={500}
           pathOptions={{
-            color: '#FF6A3D',
-            fillColor: '#FF6A3D',
-            fillOpacity: 0.08,
+            color: '#f97316',
+            fillColor: '#f97316',
+            fillOpacity: 0.12,
             dashArray: '4, 4',
-            weight: 1
+            weight: 1.5
           }}
         />
 
-        {/* Nearest Industrial Facility Marker if available */}
-        {event.nearestFacilityLat && event.nearestFacilityLon && (
-          <CircleMarker
-            center={[event.nearestFacilityLat, event.nearestFacilityLon]}
-            radius={7}
-            pathOptions={{
-              color: '#38BDF8',
-              fillColor: '#38BDF8',
-              fillOpacity: 0.85,
-              weight: 1.5
-            }}
-          >
-            <Popup>
-              <div className="mono text-brand" style={{ fontSize: '0.8rem', fontWeight: 700 }}>
-                {event.facilityName || 'Nearby Facility'}
-              </div>
-              <div style={{ fontSize: '0.75rem', marginTop: '4px', color: 'var(--text-secondary)' }}>
-                {event.facilityType || 'Industrial Facility'} · {event.dist_to_facility_km} km away
-              </div>
-            </Popup>
-          </CircleMarker>
-        )}
+        {/* 1.5km Secondary Buffer Zone */}
+        <Circle
+          center={[lat, lon]}
+          radius={1500}
+          pathOptions={{
+            color: '#dc2626',
+            fillColor: '#dc2626',
+            fillOpacity: 0.05,
+            dashArray: '6, 6',
+            weight: 1.0
+          }}
+        />
 
-        {/* Selected Anomaly Target Marker with Dynamic Risk Styling */}
-        {(() => {
-          const markerProps = getMarkerRiskProps(event, 12);
-          return (
-            <CircleMarker
-              center={[event.latitude, event.longitude]}
-              radius={Math.max(10, markerProps.radius)}
-              pathOptions={{
-                color: markerProps.color,
-                fillColor: markerProps.fillColor,
-                fillOpacity: 0.92,
-                weight: markerProps.weight
-              }}
-            >
-              <Popup>
-                <div className="mono" style={{ fontSize: '0.8rem', fontWeight: 700, color: markerProps.color }}>
-                  {event.eventId} (TARGET ANOMALY — {markerProps.label.toUpperCase()})
-                </div>
-                <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>
-                  Risk Score: <strong style={{ color: markerProps.color }}>{(markerProps.score * 100).toFixed(1)}%</strong> | FRP: <strong>{event.frp} MW</strong>
-                </div>
-                <div style={{ fontSize: '0.72rem', marginTop: '3px', color: 'var(--text-secondary)' }}>
-                  Classification: <strong>{event.predicted_class || event.eventType}</strong>
-                </div>
-              </Popup>
-            </CircleMarker>
-          );
-        })()}
+        {/* Pulsing Thermal Radiance Aura */}
+        <Circle
+          center={[lat, lon]}
+          radius={200}
+          pathOptions={{
+            color: '#ef4444',
+            fillColor: '#ef4444',
+            fillOpacity: 0.38,
+            weight: 2
+          }}
+        />
+
+        {/* Target Thermal Point Circle Marker */}
+        <CircleMarker
+          center={[lat, lon]}
+          radius={10}
+          pathOptions={{
+            color: '#ffffff',
+            fillColor: categoryColor,
+            fillOpacity: 1.0,
+            weight: 2.5
+          }}
+        >
+          <Popup>
+            <div style={{ fontSize: '0.8rem', fontFamily: 'sans-serif', padding: '2px' }}>
+              <div style={{ fontWeight: 800, color: categoryColor, marginBottom: '4px' }}>
+                {event.predicted_class || event.eventType || 'Thermal Anomaly'}
+              </div>
+              <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                📍 {lat.toFixed(4)}°N, {lon.toFixed(4)}°E
+              </div>
+              <div style={{ fontSize: '0.74rem', marginTop: '3px' }}>
+                FRP: <strong style={{ color: '#f97316' }}>{event.frp} MW</strong> &middot; Brightness: <strong>{event.bright_ti4} K</strong>
+              </div>
+              <div style={{ fontSize: '0.74rem', marginTop: '2px' }}>
+                Risk: <strong style={{ color: markerProps.color }}>{markerProps.label.toUpperCase()} ({(markerProps.score * 100).toFixed(0)}%)</strong>
+              </div>
+            </div>
+          </Popup>
+        </CircleMarker>
       </MapContainer>
 
       <style>{`
-        .context-map-wrapper {
+        .clean-context-map-container {
+          position: relative;
           width: 100%;
           border: 1px solid var(--border);
-          border-radius: 4px;
+          border-radius: 12px;
           overflow: hidden;
-          background: var(--page-bg);
+          background: #0f172a;
         }
 
-        .context-map-header {
+        .clean-context-map-container.fullscreen-mode {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100vw;
+          height: 100vh !important;
+          z-index: 99999;
+          border-radius: 0;
+          border: none;
+        }
+
+        .context-header-bar {
           height: 36px;
-          background: var(--page-bg);
-          border-bottom: 1px solid var(--border);
+          background: rgba(15, 23, 42, 0.95);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 0 0.85rem;
+          padding: 0 0.75rem;
+          color: #f8fafc;
         }
 
-        .context-title {
+        .header-left {
           display: flex;
           align-items: center;
-          gap: 0.5rem;
+          gap: 6px;
+        }
+
+        .location-title {
           font-size: 0.72rem;
-          color: var(--text-primary);
-          font-weight: 600;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          color: #e2e8f0;
         }
 
-        .context-layer-toggle {
+        .header-right {
           display: flex;
-          gap: 0.2rem;
+          align-items: center;
+          gap: 6px;
         }
 
-        .layer-btn {
+        .layer-pill-group {
+          display: flex;
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 4px;
+          padding: 2px;
+          gap: 2px;
+        }
+
+        .layer-pill {
           background: transparent;
-          border: 1px solid var(--border);
-          color: var(--text-secondary);
+          border: none;
+          color: #94a3b8;
           font-size: 0.68rem;
-          font-family: var(--font-mono);
-          padding: 0.15rem 0.45rem;
-          border-radius: 2px;
+          font-weight: 600;
+          padding: 2px 8px;
+          border-radius: 3px;
           cursor: pointer;
+          transition: all 0.15s ease;
         }
 
-        .layer-btn.active {
-          background: var(--elevated);
-          color: var(--text-primary);
+        .layer-pill:hover {
+          color: #ffffff;
+        }
+
+        .layer-pill.active {
+          background: #f97316;
+          color: #ffffff;
+        }
+
+        .btn-fullscreen-toggle {
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          color: #94a3b8;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 4px;
+          border-radius: 4px;
+          transition: all 0.15s ease;
+        }
+
+        .btn-fullscreen-toggle:hover {
+          background: rgba(255, 255, 255, 0.18);
+          color: #ffffff;
         }
       `}</style>
     </div>

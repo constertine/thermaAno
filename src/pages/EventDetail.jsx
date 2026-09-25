@@ -459,7 +459,7 @@ export default function EventDetail() {
           <div className="panel-title">CONTEXT MAP</div>
 
           <div className="map-context-wrap">
-            <ContextMap event={event} height="280px" />
+            <ContextMap event={event} height="360px" />
           </div>
 
           <div className="context-coords-grid margin-top text-secondary">
