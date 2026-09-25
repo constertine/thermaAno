@@ -164,13 +164,13 @@ export default function XaiDrawer({ event, onClose, onRefreshEvent }) {
         : getNormalizedRiskScore(event);
     const riskTier = getRiskTier(riskScore);
     const isOtherUnknown = (c) => !c || c === "Other/Unknown" || c === "Other" || c === "Unknown";
-    const predictedClass = (!isOtherUnknown(predictionData?.predicted_class))
-        ? predictionData.predicted_class
-        : (!isOtherUnknown(event.predicted_class)
-            ? event.predicted_class
+    const predictedClass = (!isOtherUnknown(event.predicted_class))
+        ? event.predicted_class
+        : (!isOtherUnknown(predictionData?.predicted_class))
+            ? predictionData.predicted_class
             : (event.facilityName?.includes("Industrial") || event.facilityType?.includes("Industrial")
                 ? "Industrial"
-                : (event.eventType || "Industrial")));
+                : (event.eventType || "Industrial"));
 
     // Extract TreeSHAP features
     const topFeatures = predictionData?.explainability?.top_contributing_features || [];

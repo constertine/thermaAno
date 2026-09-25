@@ -163,6 +163,7 @@ export default function EventDetail() {
               key_signals: found.key_signals
             });
           }
+          fetchLiveMlPrediction(found);
         }
 
         setLoading(false);
@@ -195,27 +196,49 @@ export default function EventDetail() {
     setIsChangingClass(false);
   };
 
-  // Process SHAP contributions dynamically from event properties
+  // Process SHAP contributions dynamically from Live ML Engine or event properties
   const shapBars = useMemo(() => {
     if (!event) return [];
 
     const extracted = [];
 
-    SHAP_FEATURE_DICTIONARY.forEach((item) => {
-      const rawVal = event[item.key];
+    // 1. Check if Live ML Engine returned TreeSHAP features
+    const mlFeatures = mlData?.explainability?.top_contributing_features;
+    if (Array.isArray(mlFeatures) && mlFeatures.length > 0) {
+      mlFeatures.forEach((item) => {
+        const featureKey = item.feature || item.feature_name || item.key;
+        const impactVal = parseFloat(item.impact != null ? item.impact : item.shap_value || item.value || 0);
+        const dictMatch = SHAP_FEATURE_DICTIONARY.find((d) => d.key === featureKey || d.key === `shap_${featureKey}`);
+        const label = dictMatch?.label || item.label || featureKey.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
 
-      if (rawVal !== undefined && rawVal !== null && rawVal !== "") {
-        const num = parseFloat(rawVal);
-
-        if (!isNaN(num)) {
+        if (!isNaN(impactVal)) {
           extracted.push({
-            label: item.label,
-            val: num,
-            absVal: Math.abs(num),
+            label,
+            val: impactVal,
+            absVal: Math.abs(impactVal)
           });
         }
-      }
-    });
+      });
+    }
+
+    // 2. Check event raw SHAP features if mlFeatures is empty
+    if (extracted.length === 0) {
+      SHAP_FEATURE_DICTIONARY.forEach((item) => {
+        const rawVal = event[item.key];
+
+        if (rawVal !== undefined && rawVal !== null && rawVal !== "") {
+          const num = parseFloat(rawVal);
+
+          if (!isNaN(num)) {
+            extracted.push({
+              label: item.label,
+              val: num,
+              absVal: Math.abs(num),
+            });
+          }
+        }
+      });
+    }
 
     // Fallback default weights if model features are not loaded
     if (extracted.length === 0) {
@@ -285,16 +308,16 @@ export default function EventDetail() {
       const isPositive = item.val >= 0;
 
       return {
-        ...item,
+        label: item.label,
+        val: item.val,
+        absVal: item.absVal,
         pct,
         sign: isPositive ? "+" : "-",
         color: isPositive ? "#34D399" : "#38BDF8",
-        displayVal: `${isPositive ? "+" : "-"}${(
-          item.absVal * 100
-        ).toFixed(1)}%`,
+        displayVal: `${isPositive ? "+" : "-"}${item.absVal > 1 ? item.absVal.toFixed(2) : (item.absVal * 100).toFixed(1) + "%"}`,
       };
     });
-  }, [event]);
+  }, [event, mlData]);
 
   // Strong supporting evidence factors
   const positiveEvidence = useMemo(() => {
@@ -317,6 +340,7 @@ export default function EventDetail() {
 
   const effectiveClass =
     currentClassification ||
+    mlData?.predicted_class ||
     event.predicted_class ||
     event.eventType ||
     "Unknown";

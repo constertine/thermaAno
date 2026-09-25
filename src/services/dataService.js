@@ -1215,19 +1215,20 @@ export async function fetchMlPrediction(eventData) {
         distInd = isIndustrialContext ? 0.75 : 8.5;
     }
 
-    // Landcover class must be a valid float for backend validation
-    let lcCode = 1.0;
-    if (typeof eventData.landcover_class === "number") {
+    // Landcover class must be a valid float matching ESA WorldCover codes: 40=Cropland, 10=Tree/Forest, 50=Built/Industrial, 60=Bare/Quarry, 80=Water
+    let lcCode = 50.0;
+    if (typeof eventData.landcover_class === "number" && eventData.landcover_class >= 10) {
         lcCode = eventData.landcover_class;
-    } else if (eventData.landcover_code != null) {
+    } else if (eventData.landcover_code != null && parseFloat(eventData.landcover_code) >= 10) {
         lcCode = parseFloat(eventData.landcover_code);
     } else {
-        const lcStr = String(eventData.landcover_class || eventData.eventType || "").toLowerCase();
-        if (lcStr.includes("crop") || lcStr.includes("agri")) lcCode = 2.0;
-        else if (lcStr.includes("forest") || lcStr.includes("tree")) lcCode = 3.0;
-        else if (lcStr.includes("water") || lcStr.includes("marine")) lcCode = 4.0;
-        else if (lcStr.includes("bare") || lcStr.includes("quarry") || lcStr.includes("mining")) lcCode = 5.0;
-        else lcCode = 1.0;
+        const lcStr = String(eventData.landcover_class || eventData.eventType || eventData.predicted_class || "").toLowerCase();
+        if (lcStr.includes("crop") || lcStr.includes("agri") || lcStr.includes("farm")) lcCode = 40.0;
+        else if (lcStr.includes("forest") || lcStr.includes("tree") || lcStr.includes("wildfire")) lcCode = 10.0;
+        else if (lcStr.includes("water") || lcStr.includes("marine") || lcStr.includes("flare")) lcCode = 80.0;
+        else if (lcStr.includes("bare") || lcStr.includes("quarry") || lcStr.includes("mining")) lcCode = 60.0;
+        else if (lcStr.includes("brick")) lcCode = 50.0;
+        else lcCode = 50.0;
     }
 
     // Populate all temporal properties to prevent artificial "Low Risk" bias
@@ -1301,12 +1302,12 @@ export async function fetchMlPrediction(eventData) {
                     const rawClass = result.predicted_class;
                     const isColdStartFallback = !rawClass || rawClass === "Other/Unknown" || rawClass === "Other" || rawClass === "Unknown";
 
-                    // Ensure coherent predicted class matching the feature location context
-                    const coherentClass = (!isColdStartFallback)
-                        ? rawClass
-                        : (eventData.predicted_class && eventData.predicted_class !== "Other/Unknown"
-                            ? eventData.predicted_class
-                            : (isIndustrialContext ? "Industrial" : (eventData.eventType || "Industrial")));
+                    // Prioritize event's established domain class over mismatched raw output
+                    const establishedDomainClass = (eventData.predicted_class && eventData.predicted_class !== "Other" && eventData.predicted_class !== "Other/Unknown" && eventData.predicted_class !== "Unknown")
+                        ? eventData.predicted_class
+                        : eventData.eventType;
+
+                    const coherentClass = establishedDomainClass || (!isColdStartFallback ? rawClass : (isIndustrialContext ? "Industrial" : "Industrial"));
 
                     // Calibrate risk score to prevent artificial "Low Risk" bias
                     let normRisk = result.risk_score != null ? parseFloat(result.risk_score) : null;
