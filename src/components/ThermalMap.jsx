@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Circle, Popup, useMap } from 'react-leaflet';
 import { useNavigate } from 'react-router-dom';
 import { Flame, Eye, Radio, Zap, Clock, ShieldAlert, Cpu, Sparkles } from 'lucide-react';
-import { THERMAL_MAP_URL, triggerLiveSync, getMarkerRiskProps, getNormalizedRiskScore, getRiskTier } from '../services/dataService';
+import { THERMAL_MAP_URL, triggerLiveSync, getMarkerRiskProps, getNormalizedRiskScore, getRiskTier, getEventCategoryColor } from '../services/dataService';
 import XaiDrawer from './XaiDrawer';
 import ApiStatusBadge from './ApiStatusBadge';
 
@@ -110,9 +110,9 @@ function ThermalEventsRenderer({
               radius={markerProps.radius}
               pathOptions={{
                 color: isEarlyWarning ? '#dc2626' : markerProps.color,
-                fillColor: markerProps.fillColor,
+                fillColor: getEventCategoryColor(evt),
                 fillOpacity: 0.92,
-                weight: isFastTrigger ? 2.8 : markerProps.weight
+                weight: isFastTrigger ? 2.8 : Math.max(1.5, markerProps.weight)
               }}
               eventHandlers={{
                 click: () => {

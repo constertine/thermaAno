@@ -402,6 +402,32 @@ export function matchesEventType(evt, selectedType) {
     return evtType.includes(target);
 }
 
+export const EVENT_CATEGORY_COLORS = {
+    Industrial: "#A78BFA",         // Purple
+    Agricultural: "#A3E635",       // Lime Green
+    Forest: "#34D399",             // Mint Green
+    Mining: "#F59E0B",             // Amber / Warm Orange
+    "Brick Kiln": "#FB7185",       // Rose / Pink
+    "Waste/Landfill": "#38BDF8",   // Cyan / Sky Blue
+    "Power Plant": "#EF4444",      // Bright Red
+    "Gas Flare": "#FF9F1C",        // Deep Orange
+    Other: "#64748B",              // Slate Grey
+};
+
+export function getEventCategoryColor(evt) {
+    if (!evt) return EVENT_CATEGORY_COLORS.Other;
+    const type = String(evt.eventType || evt.predicted_class || evt.model_predicted_class || "").trim();
+    if (type === "Industrial" || type.includes("Industrial")) return EVENT_CATEGORY_COLORS.Industrial;
+    if (type === "Power Plant" || type.includes("Power")) return EVENT_CATEGORY_COLORS["Power Plant"];
+    if (type === "Gas Flare" || type.includes("Flare") || type.includes("Gas")) return EVENT_CATEGORY_COLORS["Gas Flare"];
+    if (type === "Mining" || type.includes("Mining") || type.includes("Quarry")) return EVENT_CATEGORY_COLORS.Mining;
+    if (type === "Brick Kiln" || type.includes("Brick")) return EVENT_CATEGORY_COLORS["Brick Kiln"];
+    if (type === "Waste/Landfill" || type.includes("Waste") || type.includes("Landfill")) return EVENT_CATEGORY_COLORS["Waste/Landfill"];
+    if (type === "Agricultural" || type.includes("Agri") || type.includes("Crop") || type.includes("Stubble")) return EVENT_CATEGORY_COLORS.Agricultural;
+    if (type === "Forest" || type.includes("Forest") || type.includes("Wildfire")) return EVENT_CATEGORY_COLORS.Forest;
+    return EVENT_CATEGORY_COLORS.Other;
+}
+
 // Enhanced Event Type & Sentinel-2 Landcover Classification Engine (Client & Server)
 export function classifyEventType(item) {
     const name = (item.name || item.facilityName || "").toLowerCase();
@@ -414,63 +440,89 @@ export function classifyEventType(item) {
     const bright4 = parseFloat(item.bright_ti4 || item.brightness || 320);
     const bright5 = parseFloat(item.bright_ti5 || item.bright_t31 || 290);
     const deltaT = bright4 - bright5;
+    const distM = parseFloat(item.dist_to_facility_m || 30000);
+    const distKm = parseFloat(item.dist_industrial_zone_km || item.dist_to_facility_km || (distM / 1000));
+    const distPowerKm = parseFloat(item.dist_power_plant_km || 999);
+    const distQuarryKm = parseFloat(item.dist_quarry_km || 999);
+    const distBrickKm = parseFloat(item.dist_brick_kiln_km || 999);
+    const distOilGasKm = parseFloat(item.dist_oil_gas_km || 999);
+    const distWasteKm = parseFloat(item.dist_waste_site_km || 999);
+    const lcCode = item.landcover_code != null ? Number(item.landcover_code) : (typeof item.landcover_class === 'number' ? item.landcover_class : null);
 
-    // 1. Offshore Gas Flare (Arabian Sea / Bombay High / Gulf of Khambhat)
+    // 1. Offshore Gas Flare (Arabian Sea / Bombay High / Gulf of Khambhat / KG Basin)
     if (
         (lat >= 18.0 && lat <= 20.5 && lon >= 70.0 && lon <= 72.5) ||
         (lat >= 20.5 && lat <= 22.0 && lon >= 71.8 && lon <= 72.8) ||
-        industrial.includes("flare") || name.includes("gas") || name.includes("flare")
+        (lat >= 15.5 && lat <= 17.5 && lon >= 81.8 && lon <= 83.8) ||
+        distOilGasKm <= 5.0 || industrial.includes("flare") || name.includes("gas") || name.includes("flare")
     ) {
         return "Gas Flare";
     }
 
-    // 2. Power Plants & Thermal Stations
+    // 2. Power Plants & Thermal Energy Stations
     if (
-        power === "plant" || name.includes("power") || name.includes("thermal station") ||
+        power === "plant" || distPowerKm <= 6.0 || name.includes("power") || name.includes("thermal station") ||
         name.includes("ntpc") || industrial.includes("power")
     ) {
         return "Power Plant";
     }
 
-    // 3. Mining / Quarry
+    // 3. Mining / Mineral Quarry Pits
     if (
-        landuse === "mining" || landuse === "quarry" || industrial.includes("mine") ||
-        name.includes("coal") || name.includes("mining") || name.includes("quarry")
+        landuse === "mining" || landuse === "quarry" || distQuarryKm <= 4.0 || lcCode === 60 ||
+        industrial.includes("mine") || name.includes("coal") || name.includes("mining") || name.includes("quarry")
     ) {
         return "Mining";
     }
 
-    // 4. Agricultural Stubble / Crop Residue Burning (Punjab, Haryana, Upper UP, Malwa MP)
+    // 4. Brick Kiln Facilities
     if (
-        landuse === "farmland" || landuse.includes("crop") || landuse.includes("agri") ||
-        (lat >= 28.5 && lat <= 32.5 && lon >= 73.5 && lon <= 77.5) || // Punjab & Haryana agricultural belt
-        (lat >= 25.5 && lat <= 29.5 && lon >= 77.0 && lon <= 84.5 && frp <= 20) || // Indo-Gangetic Plain
-        (deltaT > 25 && frp <= 20)
+        distBrickKm <= 3.0 || name.includes("brick") || landuse.includes("brick")
     ) {
-        return "Agricultural";
+        return "Brick Kiln";
     }
 
-    // 5. Forest Wildfire / Vegetative Canopy (Western Ghats, Northeast, Central Forests)
+    // 5. Waste / Landfill Disposal Sites
     if (
-        landuse === "forest" || name.includes("wildfire") || name.includes("forest") ||
-        (lat >= 8.5 && lat <= 15.5 && lon >= 74.5 && lon <= 77.5) ||
-        (lat >= 24.5 && lat <= 28.5 && lon >= 90.0 && lon <= 96.0) ||
-        (deltaT > 40 && frp > 15)
+        distWasteKm <= 3.5 || name.includes("waste") || name.includes("landfill") || landuse.includes("landfill")
     ) {
-        return "Forest";
+        return "Waste/Landfill";
     }
 
-    // 6. Industrial Infrastructure
+    // 6. Industrial Infrastructure & Manufacturing Plants
     if (
+        distKm <= 8.0 || distM <= 8000 || lcCode === 50 ||
         landuse === "industrial" || industrial !== "" || name.includes("refinery") ||
+        name.includes("steel") || name.includes("cement") || name.includes("chemical") ||
         name.includes("plant") || name.includes("factory") || name.includes("complex") ||
         frp >= 25.0
     ) {
         return "Industrial";
     }
 
-    // Fallback: If deltaT > 20, agricultural stubble burn, else Industrial
-    return deltaT > 20 ? "Agricultural" : "Industrial";
+    // 7. Forest Wildfire / Vegetative Canopy Reserves
+    if (
+        lcCode === 10 || landuse === "forest" || name.includes("wildfire") || name.includes("forest") ||
+        name.includes("reserve") || name.includes("sanctuary") || name.includes("national park") ||
+        (deltaT > 38 && frp > 15)
+    ) {
+        return "Forest";
+    }
+
+    // 8. Agricultural Stubble / Crop Residue Burning
+    if (
+        lcCode === 40 || landuse === "farmland" || landuse.includes("crop") || landuse.includes("agri") ||
+        name.includes("farm") || (deltaT > 20 && frp <= 20)
+    ) {
+        return "Agricultural";
+    }
+
+    // Proximity / Thermal Fallback
+    if (distKm <= 15.0 || distM <= 15000) {
+        return "Industrial";
+    }
+
+    return deltaT > 22 ? "Agricultural" : "Industrial";
 }
 
 // Compute dynamic Risk Score (0 - 100) & Severity Category
