@@ -1297,17 +1297,31 @@ export async function fetchMlPrediction(eventData) {
             if (res.ok) {
                 const data = await res.json();
                 const result = data.prediction || data;
-                if (result && (result.predicted_class || result.risk_score != null)) {
-                    // Check if backend returned cold start Other/Unknown fallback
+                if (result) {
                     const rawClass = result.predicted_class;
                     const isColdStartFallback = !rawClass || rawClass === "Other/Unknown" || rawClass === "Other" || rawClass === "Unknown";
 
-                    // Prioritize event's established domain class over mismatched raw output
-                    const establishedDomainClass = (eventData.predicted_class && eventData.predicted_class !== "Other" && eventData.predicted_class !== "Other/Unknown" && eventData.predicted_class !== "Unknown")
-                        ? eventData.predicted_class
-                        : eventData.eventType;
+                    // Extract predicted class directly from the highest probability (argmax)
+                    let classProbabilities = result.class_probabilities;
+                    let argMaxPredictedClass = null;
 
-                    const coherentClass = establishedDomainClass || (!isColdStartFallback ? rawClass : (isIndustrialContext ? "Industrial" : "Industrial"));
+                    if (classProbabilities && typeof classProbabilities === "object") {
+                        const sorted = Object.entries(classProbabilities)
+                            .map(([cls, p]) => [cls, typeof p === "number" ? p : parseFloat(p || 0)])
+                            .filter(([_, p]) => !isNaN(p))
+                            .sort((a, b) => b[1] - a[1]);
+
+                        if (sorted.length > 0 && sorted[0][1] > 0) {
+                            if (sorted[0][0] === "Other/Unknown" || sorted[0][0] === "Other" || sorted[0][0] === "Unknown") {
+                                const nextBest = sorted.find(([cls, p]) => cls !== "Other/Unknown" && cls !== "Other" && cls !== "Unknown" && p > 0.15);
+                                argMaxPredictedClass = nextBest ? nextBest[0] : sorted[0][0];
+                            } else {
+                                argMaxPredictedClass = sorted[0][0];
+                            }
+                        }
+                    }
+
+                    const coherentClass = argMaxPredictedClass || (!isColdStartFallback ? rawClass : (eventData.predicted_class || eventData.eventType || "Industrial"));
 
                     // Calibrate risk score to prevent artificial "Low Risk" bias
                     let normRisk = result.risk_score != null ? parseFloat(result.risk_score) : null;
@@ -1334,9 +1348,8 @@ export async function fetchMlPrediction(eventData) {
                             : recencyScore
                     };
 
-                    // Class probabilities: align with coherent class
-                    let classProbabilities = result.class_probabilities;
-                    if (isColdStartFallback || !classProbabilities || classProbabilities["Other/Unknown"] > 0.8) {
+                    // Align fallback class probabilities if missing
+                    if (isColdStartFallback || !classProbabilities || (classProbabilities["Other/Unknown"] > 0.8 && !argMaxPredictedClass)) {
                         classProbabilities = {
                             "Industrial": coherentClass === "Industrial" ? 0.88 : 0.04,
                             "Wildfire": coherentClass.includes("Forest") || coherentClass.includes("Wildfire") ? 0.86 : 0.03,

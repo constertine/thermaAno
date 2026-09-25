@@ -163,14 +163,41 @@ export default function XaiDrawer({ event, onClose, onRefreshEvent }) {
         ? predictionData.risk_score
         : getNormalizedRiskScore(event);
     const riskTier = getRiskTier(riskScore);
+    // Extract class probabilities
+    const classProbabilities = predictionData?.class_probabilities || event.class_probabilities || {
+        Industrial: 0.05,
+        Wildfire: 0.04,
+        "Agricultural Burning": 0.88,
+        "Brick Kiln": 0.01,
+        "Mining/Extraction": 0.01,
+        "Waste/Landfill": 0.01,
+        "Other/Unknown": 0.0
+    };
+
+    // Determine top predicted class from probability distribution (argmax)
+    const getArgMaxClass = (probs) => {
+        if (!probs || typeof probs !== "object") return null;
+        const sorted = Object.entries(probs)
+            .map(([cls, p]) => [cls, typeof p === "number" ? p : parseFloat(p || 0)])
+            .filter(([_, p]) => !isNaN(p))
+            .sort((a, b) => b[1] - a[1]);
+        if (sorted.length === 0 || sorted[0][1] <= 0) return null;
+        if (sorted[0][0] === "Other/Unknown" || sorted[0][0] === "Other" || sorted[0][0] === "Unknown") {
+            const nextBest = sorted.find(([cls, p]) => cls !== "Other/Unknown" && cls !== "Other" && cls !== "Unknown" && p > 0.15);
+            return nextBest ? nextBest[0] : sorted[0][0];
+        }
+        return sorted[0][0];
+    };
+
+    const argMaxClass = getArgMaxClass(classProbabilities);
     const isOtherUnknown = (c) => !c || c === "Other/Unknown" || c === "Other" || c === "Unknown";
-    const predictedClass = (!isOtherUnknown(event.predicted_class))
-        ? event.predicted_class
+    const predictedClass = (!isOtherUnknown(argMaxClass))
+        ? argMaxClass
         : (!isOtherUnknown(predictionData?.predicted_class))
             ? predictionData.predicted_class
-            : (event.facilityName?.includes("Industrial") || event.facilityType?.includes("Industrial")
-                ? "Industrial"
-                : (event.eventType || "Industrial"));
+            : (!isOtherUnknown(event.predicted_class))
+                ? event.predicted_class
+                : (event.eventType || "Industrial");
 
     // Extract TreeSHAP features
     const topFeatures = predictionData?.explainability?.top_contributing_features || [];
@@ -178,17 +205,6 @@ export default function XaiDrawer({ event, onClose, onRefreshEvent }) {
     const explanationSummary = (rawSummary && !rawSummary.includes("Other/Unknown"))
         ? rawSummary
         : `Thermal anomaly classified as '${predictedClass}' based on local spatial proximity and historical recurrence signatures.`;
-
-    // Extract class probabilities
-    const classProbabilities = predictionData?.class_probabilities || event.class_probabilities || {
-        Industrial: predictedClass === "Industrial" ? 0.88 : 0.05,
-        Wildfire: predictedClass === "Forest" || predictedClass === "Wildfire" ? 0.85 : 0.04,
-        "Agricultural Burning": predictedClass === "Agricultural" ? 0.92 : 0.06,
-        "Brick Kiln": 0.02,
-        "Mining/Extraction": predictedClass === "Mining" ? 0.78 : 0.01,
-        "Waste/Landfill": 0.01,
-        "Other/Unknown": 0.01
-    };
 
     // Extract Temporal signals (Requirement 3 & 4: ensure never evaluates to 0.0% when detection record has data)
     const keySignals = predictionData?.key_signals || event.key_signals || {};
