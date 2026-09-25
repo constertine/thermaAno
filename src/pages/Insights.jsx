@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { loadEventsData, matchesRisk } from "../services/dataService";
+import { loadEventsData, matchesRisk, matchesEventType } from "../services/dataService";
 import { exportEventsToCSV } from "../utils/csvExporter";
 import FilterPanel from "../components/FilterPanel";
 import {
@@ -36,8 +36,7 @@ export default function Insights() {
     const filteredEvents = useMemo(() => {
         return events.filter((evt) => {
             if (!matchesRisk(evt, selectedRisk)) return false;
-            if (selectedType !== "ALL" && evt.eventType !== selectedType)
-                return false;
+            if (!matchesEventType(evt, selectedType)) return false;
             if (selectedState !== "ALL" && evt.state !== selectedState)
                 return false;
             if (searchQuery) {

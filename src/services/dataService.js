@@ -363,6 +363,45 @@ export function matchesConfidence(evt, selectedConf) {
     return true;
 }
 
+export function matchesEventType(evt, selectedType) {
+    if (!selectedType || selectedType === "ALL") return true;
+    const target = String(selectedType).toUpperCase().trim();
+    const evtType = String(evt.eventType || evt.predicted_class || evt.model_predicted_class || "").toUpperCase().trim();
+
+    if (evtType === target) return true;
+
+    // Flexible category mapping
+    if (target.includes("MINING") || target.includes("QUARRY")) {
+        return evtType.includes("MINING") || evtType.includes("QUARRY");
+    }
+    if (target.includes("AGRICULTUR") || target.includes("STUBBLE")) {
+        return evtType.includes("AGRICULTUR") || evtType.includes("CROP") || evtType.includes("STUBBLE");
+    }
+    if (target.includes("FOREST") || target.includes("WILDFIRE")) {
+        return evtType.includes("FOREST") || evtType.includes("WILDFIRE");
+    }
+    if (target.includes("BRICK")) {
+        return evtType.includes("BRICK");
+    }
+    if (target.includes("WASTE") || target.includes("LANDFILL")) {
+        return evtType.includes("WASTE") || evtType.includes("LANDFILL");
+    }
+    if (target.includes("POWER")) {
+        return evtType.includes("POWER");
+    }
+    if (target.includes("FLARE") || target.includes("GAS")) {
+        return evtType.includes("FLARE") || evtType.includes("GAS");
+    }
+    if (target === "INDUSTRIAL" || target.includes("INDUSTRIAL")) {
+        return evtType === "INDUSTRIAL" || evtType.includes("INDUSTRIAL");
+    }
+    if (target === "OTHER" || target.includes("OTHER") || target.includes("UNKNOWN")) {
+        return evtType === "OTHER" || evtType.includes("OTHER") || evtType.includes("UNKNOWN");
+    }
+
+    return evtType.includes(target);
+}
+
 // Enhanced Event Type & Sentinel-2 Landcover Classification Engine (Client & Server)
 export function classifyEventType(item) {
     const name = (item.name || item.facilityName || "").toLowerCase();

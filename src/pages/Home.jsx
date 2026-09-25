@@ -6,6 +6,7 @@ import {
     loadEventsData,
     matchesRisk,
     matchesConfidence,
+    matchesEventType,
     subscribeToLiveStream,
 } from "../services/dataService";
 import {
@@ -48,6 +49,10 @@ export default function Home() {
         Industrial: "#A78BFA",
         Agricultural: "#A3E635",
         Forest: "#34D399",
+        Mining: "#F59E0B",
+        "Brick Kiln": "#FB7185",
+        "Waste/Landfill": "#38BDF8",
+        "Power Plant": "#EF4444",
         "Gas Flare": "#FF9F1C",
         Other: "#64748B",
     };
@@ -55,8 +60,7 @@ export default function Home() {
     const filteredEvents = events.filter((evt) => {
         if (!matchesRisk(evt, selectedRisk)) return false;
         if (!matchesConfidence(evt, selectedConfidence)) return false;
-        if (selectedType !== "ALL" && evt.eventType !== selectedType)
-            return false;
+        if (!matchesEventType(evt, selectedType)) return false;
         if (
             selectedSatellite !== "ALL" &&
             !evt.satellite?.includes(selectedSatellite)

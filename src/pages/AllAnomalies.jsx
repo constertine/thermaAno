@@ -5,6 +5,7 @@ import {
     loadEventsData,
     matchesRisk,
     matchesConfidence,
+    matchesEventType,
 } from "../services/dataService";
 import { exportEventsToCSV } from "../utils/csvExporter";
 import {
@@ -46,8 +47,7 @@ export default function AllAnomalies() {
         let result = events.filter((evt) => {
             if (!matchesRisk(evt, selectedRisk)) return false;
             if (!matchesConfidence(evt, selectedConfidence)) return false;
-            if (selectedType !== "ALL" && evt.eventType !== selectedType)
-                return false;
+            if (!matchesEventType(evt, selectedType)) return false;
             if (selectedState !== "ALL" && evt.state !== selectedState)
                 return false;
             if (searchQuery) {

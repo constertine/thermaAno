@@ -119,6 +119,8 @@ export default function Intelligence() {
             Industrial: 0,
             "Power Plant": 0,
             Mining: 0,
+            "Brick Kiln": 0,
+            "Waste/Landfill": 0,
             "Gas Flare": 0,
             Agricultural: 0,
             Forest: 0,
@@ -128,6 +130,12 @@ export default function Intelligence() {
         filteredEvents.forEach((e) => {
             if (counts[e.eventType] !== undefined) {
                 counts[e.eventType] += 1;
+            } else if (e.eventType?.includes("Waste") || e.eventType?.includes("Landfill")) {
+                counts["Waste/Landfill"] += 1;
+            } else if (e.eventType?.includes("Brick")) {
+                counts["Brick Kiln"] += 1;
+            } else if (e.eventType?.includes("Mining") || e.eventType?.includes("Quarry")) {
+                counts["Mining"] += 1;
             } else {
                 counts["Other"] += 1;
             }
@@ -145,6 +153,8 @@ export default function Intelligence() {
                 color: "#F04819",
             },
             { name: "Mining", value: counts["Mining"], color: "#FF6A3D" },
+            { name: "Brick Kiln", value: counts["Brick Kiln"], color: "#FB7185" },
+            { name: "Waste/Landfill", value: counts["Waste/Landfill"], color: "#38BDF8" },
             { name: "Gas Flare", value: counts["Gas Flare"], color: "#FF9E7D" },
             {
                 name: "Agricultural",

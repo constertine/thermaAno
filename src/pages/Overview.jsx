@@ -2,9 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ThermalMap from '../components/ThermalMap';
 import StatCard from '../components/StatCard';
-import { loadEventsData, subscribeToLiveStream, getNormalizedRiskScore, getRiskTier } from '../services/dataService';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, LineChart, Line } from 'recharts';
-import { AlertTriangle, ArrowRight } from 'lucide-react';
+import { loadEventsData, subscribeToLiveStream } from '../services/dataService';
+import { AlertTriangle } from 'lucide-react';
 
 export default function Overview() {
   const navigate = useNavigate();
@@ -25,78 +24,6 @@ export default function Overview() {
       if (unsubscribe) unsubscribe();
     };
   }, []);
-
-  // Category legend colors from palette
-  const categoryColors = {
-      Industrial: "var(--text-primary)",
-      "Gas Flare": "var(--text-primary)",
-      "Power Plant": "var(--text-primary)",
-      Mining: "var(--text-primary)",
-      Agricultural: "var(--text-primary)",
-      Forest: "var(--text-primary)",
-  };
-
-  // Dynamic Donut Data for RISK DISTRIBUTION (Exact 4 Tiers: >=0.8 Critical, 0.6-0.79 High, 0.4-0.59 Med, <0.4 Low)
-  const riskDistributionData = useMemo(() => {
-    let crit = 0, high = 0, med = 0, low = 0;
-    (events || []).forEach(e => {
-      const s = getNormalizedRiskScore(e);
-      if (s >= 0.8) crit++;
-      else if (s >= 0.6) high++;
-      else if (s >= 0.4) med++;
-      else low++;
-    });
-    return [
-      { name: 'Critical (≥0.80)', value: crit || 142, color: '#dc2626' },
-      { name: 'High (0.60–0.79)', value: high || 318, color: '#f97316' },
-      { name: 'Medium (0.40–0.59)', value: med || 684, color: '#facc15' },
-      { name: 'Low (<0.40)', value: low || 397, color: '#22c55e' }
-    ];
-  }, [events]);
-
-  // Dynamic Horizontal Bar Data for CLASSIFICATION DISTRIBUTION
-  const classificationData = useMemo(() => {
-    const counts = {
-      'Industrial': 0,
-      'Power Plant': 0,
-      'Gas Flare': 0,
-      'Mining': 0,
-      'Agricultural': 0,
-      'Forest': 0
-    };
-    (events || []).forEach(e => {
-      const type = e.eventType || (e.predicted_class?.includes('Agri') ? 'Agricultural' : e.predicted_class?.includes('Forest') ? 'Forest' : e.predicted_class?.includes('Power') ? 'Power Plant' : e.predicted_class?.includes('Mining') ? 'Mining' : 'Industrial');
-      if (counts[type] !== undefined) counts[type]++;
-      else counts['Industrial']++;
-    });
-    return [
-      { name: 'Industrial', count: counts['Industrial'], color: '#A78BFA' },
-      { name: 'Power Plant', count: counts['Power Plant'], color: '#38BDF8' },
-      { name: 'Gas Flare', count: counts['Gas Flare'], color: '#FF9F1C' },
-      { name: 'Mining', count: counts['Mining'], color: '#F0653D' },
-      { name: 'Agricultural', count: counts['Agricultural'], color: '#A3E635' },
-      { name: 'Forest', count: counts['Forest'], color: '#34D399' }
-    ];
-  }, [events]);
-
-  // Dynamic Trend Line Data (grouped by 4-hour acquisition buckets)
-  const trendData = useMemo(() => {
-    const buckets = [
-      { time: '00:00 - 04:00', val: 0 },
-      { time: '04:00 - 08:00', val: 0 },
-      { time: '08:00 - 12:00', val: 0 },
-      { time: '12:00 - 16:00', val: 0 },
-      { time: '16:00 - 20:00', val: 0 },
-      { time: '20:00 - 24:00', val: 0 }
-    ];
-    (events || []).forEach(e => {
-      const timeStr = String(e.acq_time || '12:00');
-      const hour = parseInt(timeStr.replace(':', '').slice(0, 2), 10) || 12;
-      const bIdx = Math.min(5, Math.floor(hour / 4));
-      buckets[bIdx].val++;
-    });
-    return buckets;
-  }, [events]);
 
   const priorityEvents = useMemo(() => {
     return [...(events || [])]
@@ -180,77 +107,6 @@ export default function Overview() {
         <StatCard title="PERSISTENT SOURCES" value={stats.persistent} type="persistent" />
         <StatCard title="LIVE SENSOR SPIKES" value={stats.newEvents} type="newEvent" />
         <StatCard title="ACTIVE ALERTS" value={stats.activeAlerts} type="alerts" />
-      </div>
-
-      {/* SCREENSHOT 3: THREE CHARTS GRID */}
-      <div className="charts-grid-3" style={{ marginTop: "35px" }}>
-        {/* CHART 1: THERMAL ANOMALY TREND */}
-        <div className="panel-card chart-card-box">
-          <div className="panel-title">THERMAL ANOMALY TREND</div>
-          <div className="chart-wrapper">
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={trendData} margin={{ top: 20, right: 20, left: -20, bottom: 0 }}>
-                <Line type="step" dataKey="val" stroke="#FF6A3D" strokeWidth={3} dot={{ fill: '#FF3B47', r: 5 }} />
-                <Tooltip contentStyle={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* CHART 2: RISK DISTRIBUTION */}
-        <div className="panel-card chart-card-box">
-          <div className="panel-title">RISK DISTRIBUTION</div>
-          <div className="chart-wrapper" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie
-                  data={riskDistributionData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={85}
-                  paddingAngle={4}
-                  dataKey="value"
-                >
-                  {riskDistributionData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
-              </PieChart>
-            </ResponsiveContainer>
-
-            {/* Donut Legend */}
-            <div className="donut-legend-row">
-              {riskDistributionData.map(item => (
-                <div key={item.name} className="legend-item-col">
-                  <span className="dot" style={{ backgroundColor: item.color }}></span>
-                  <span className="lbl text-secondary">{item.name}</span>
-                  <span className="val">{item.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* CHART 3: CLASSIFICATION DISTRIBUTION */}
-        <div className="panel-card chart-card-box">
-          <div className="panel-title">CLASSIFICATION DISTRIBUTION</div>
-          <div className="chart-wrapper">
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart layout="vertical" data={classificationData} margin={{ top: 10, right: 20, left: 20, bottom: 0 }}>
-                <XAxis type="number" stroke="var(--text-secondary)" fontSize={11} hide />
-                <YAxis dataKey="name" type="category" stroke="var(--text-secondary)" fontSize={11} width={80} tickLine={false} />
-                <Tooltip contentStyle={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
-                <Bar dataKey="count" radius={[0, 10, 10, 0]}>
-                  {classificationData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
       </div>
 
       <style>{`
@@ -394,44 +250,8 @@ export default function Overview() {
           gap: 1.25rem;
         }
 
-        .charts-grid-3 {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 1.5rem;
-        }
-
-        .chart-card-box {
-          border: 1px solid var(--brand);
-          border-radius: var(--radius-large); /* Curved edges 50px */
-          padding: 1.5rem;
-        }
-
-        .chart-wrapper {
-          margin-top: 1rem;
-        }
-
-        .donut-legend-row {
-          display: flex;
-          gap: 0.85rem;
-          justify-content: center;
-          margin-top: 0.5rem;
-        }
-
-        .legend-item-col {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          font-size: 0.72rem;
-        }
-
-        .legend-item-col .val {
-          font-weight: 700;
-          color: var(--text-primary);
-        }
-
         @media (max-width: 1200px) {
           .stats-grid-6 { grid-template-columns: repeat(3, 1fr); }
-          .charts-grid-3 { grid-template-columns: 1fr; }
           .map-and-sidebar-grid { grid-template-columns: 1fr; }
         }
       `}</style>

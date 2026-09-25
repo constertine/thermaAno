@@ -17,12 +17,16 @@ export default function FilterPanel({
     const risks = ["ALL", "CRITICAL", "HIGH", "MEDIUM", "LOW"];
     const confidences = ["ALL", ">90%", "70–90%", "<70%"];
     const eventTypes = [
-        "ALL",
-        "Industrial",
-        "Agricultural",
-        "Forest",
-        "Gas Flare",
-        "Other",
+        { value: "ALL", label: "All Event Types" },
+        { value: "Industrial", label: "Industrial Infrastructure" },
+        { value: "Agricultural", label: "Agricultural Burning" },
+        { value: "Forest", label: "Forest / Wildfire" },
+        { value: "Mining", label: "Mining / Quarry Extraction" },
+        { value: "Brick Kiln", label: "Brick Kiln" },
+        { value: "Waste/Landfill", label: "Waste / Landfill" },
+        { value: "Power Plant", label: "Power Plant Discharge" },
+        { value: "Gas Flare", label: "Petroleum Gas Flare" },
+        { value: "Other", label: "Other / Unknown" },
     ];
     const indianStates = [
         { value: "ALL", label: "All Indian States" },
@@ -123,8 +127,8 @@ export default function FilterPanel({
                             onChange={(e) => setSelectedType(e.target.value)}
                         >
                             {eventTypes.map((t) => (
-                                <option key={t} value={t}>
-                                    {t === "ALL" ? "All Event Types" : t}
+                                <option key={t.value} value={t.value}>
+                                    {t.label}
                                 </option>
                             ))}
                         </select>
