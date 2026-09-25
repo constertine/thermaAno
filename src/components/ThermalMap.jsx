@@ -48,8 +48,6 @@ function ThermalEventsRenderer({
   bounds,
   onSelectEvent,
   setSelectedXaiEvent,
-  activePopupEvent,
-  setActivePopupEvent,
   navigate
 }) {
   // Viewport Culling: only render markers that intersect visible screen (plus 0.5 deg buffer) to keep canvas super fast
@@ -66,15 +64,9 @@ function ThermalEventsRenderer({
     });
   }, [events, bounds]);
 
-  const handleMarkerClick = (evt) => {
-    setActivePopupEvent(evt);
-    setSelectedXaiEvent(evt);
-    if (onSelectEvent) onSelectEvent(evt);
-  };
-
   return (
     <>
-      {/* Individual Hotspot Dots Only (No numbers / clusters) */}
+      {/* Individual Hotspot Dots with Native Leaflet Popups */}
       {visibleEvents.map((evt) => {
         const markerProps = getMarkerRiskProps(evt, zoom);
         const isFastTrigger = evt.is_flash_trigger || evt.satellite?.includes('INSAT') || evt.satellite?.includes('Himawari');
@@ -123,107 +115,98 @@ function ThermalEventsRenderer({
                 weight: isFastTrigger ? 2.8 : markerProps.weight
               }}
               eventHandlers={{
-                click: () => handleMarkerClick(evt)
+                click: () => {
+                  setSelectedXaiEvent(evt);
+                  if (onSelectEvent) onSelectEvent(evt);
+                }
               }}
-            />
+            >
+              <Popup>
+                <div className="map-popup-card">
+                  <div className="popup-header">
+                    <span className="mono popup-id">{evt.eventId}</span>
+                    <span
+                      className="badge"
+                      style={{
+                        backgroundColor: `${markerProps.color}22`,
+                        color: markerProps.color,
+                        border: `1px solid ${markerProps.color}55`,
+                        fontWeight: 700
+                      }}
+                    >
+                      {evt.is_early_warning ? '⚡ EARLY WARNING' : `${markerProps.label.toUpperCase()} (${(markerProps.score * 100).toFixed(0)}%)`}
+                    </span>
+                  </div>
+
+                  <div className="popup-facility">{evt.predicted_class || evt.eventType || 'Thermal Anomaly'}</div>
+                  <div className="popup-state text-muted">
+                    <span>{evt.facilityName ? `${evt.facilityName} · ` : ''}{evt.state}</span>
+                  </div>
+                  <div className="popup-coords mono" style={{ fontSize: '0.7rem', color: 'var(--brand)', marginBottom: '0.35rem' }}>
+                    📍 {parseFloat(evt.latitude).toFixed(4)}° N, {parseFloat(evt.longitude).toFixed(4)}° E
+                  </div>
+
+                  <div className="popup-sensor-badge">
+                    <Radio size={12} style={{ color: isFastTrigger ? '#f97316' : '#38BDF8' }} />
+                    <span>{evt.satellite || 'VIIRS / MODIS'}</span>
+                  </div>
+
+                  <div className="popup-metrics grid-2">
+                    <div>
+                      <span className="popup-label">Risk Score:</span>
+                      <span className="popup-val mono" style={{ color: markerProps.color, fontWeight: 700 }}>
+                        {(markerProps.score * 100).toFixed(1)}% ({markerProps.label})
+                      </span>
+                    </div>
+                    <div>
+                      <span className="popup-label">FRP Power:</span>
+                      <span className="popup-val mono text-thermal">{evt.frp} MW</span>
+                    </div>
+                    <div>
+                      <span className="popup-label">Brightness:</span>
+                      <span className="popup-val mono">{evt.bright_ti4} K</span>
+                    </div>
+                    <div>
+                      <span className="popup-label">Acquired:</span>
+                      <span className="popup-val mono">{evt.acq_date} {evt.acq_time}</span>
+                    </div>
+                    {evt.landcover_class && (
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <span className="popup-label">Sentinel-2 Landcover:</span>
+                        <span className="popup-val mono" style={{ color: '#38BDF8' }}>🌱 {evt.landcover_class}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {(evt.reason || evt.diagnosis) && (
+                    <div className="popup-reason-box" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', background: 'var(--page-bg)', padding: '5px 7px', borderRadius: '4px', marginBottom: '0.6rem', borderLeft: `3px solid ${markerProps.color}`, lineHeight: 1.3 }}>
+                      <strong style={{ color: markerProps.color }}>Diagnosis:</strong> {evt.reason || evt.diagnosis}
+                    </div>
+                  )}
+
+                  <div className="popup-actions" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <button
+                      className="btn btn-sm btn-primary full-w"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)', border: 'none' }}
+                      onClick={() => setSelectedXaiEvent(evt)}
+                    >
+                      <Cpu size={12} />
+                      <span>Inspect Explainable AI (TreeSHAP)</span>
+                    </button>
+                    <button
+                      className="btn btn-sm btn-secondary full-w"
+                      onClick={() => navigate(`/event/${evt.id || evt.eventId}`)}
+                    >
+                      <Eye size={12} />
+                      <span>Multi-Sensor Deep Analysis</span>
+                    </button>
+                  </div>
+                </div>
+              </Popup>
+            </CircleMarker>
           </React.Fragment>
         );
       })}
-
-      {/* SINGLE ACTIVE POPUP (Dramatically optimizes DOM & memory performance) */}
-      {activePopupEvent && (() => {
-        const evt = activePopupEvent;
-        const markerProps = getMarkerRiskProps(evt, zoom);
-        const isFastTrigger = evt.is_flash_trigger || evt.satellite?.includes('INSAT') || evt.satellite?.includes('Himawari');
-
-        return (
-          <Popup
-            position={[evt.latitude, evt.longitude]}
-            onClose={() => setActivePopupEvent(null)}
-          >
-            <div className="map-popup-card">
-              <div className="popup-header">
-                <span className="mono popup-id">{evt.eventId}</span>
-                <span
-                  className="badge"
-                  style={{
-                    backgroundColor: `${markerProps.color}22`,
-                    color: markerProps.color,
-                    border: `1px solid ${markerProps.color}55`,
-                    fontWeight: 700
-                  }}
-                >
-                  {evt.is_early_warning ? '⚡ EARLY WARNING' : `${markerProps.label.toUpperCase()} (${(markerProps.score * 100).toFixed(0)}%)`}
-                </span>
-              </div>
-
-              <div className="popup-facility">{evt.predicted_class || evt.eventType || 'Thermal Anomaly'}</div>
-              <div className="popup-state text-muted">
-                <span>{evt.facilityName ? `${evt.facilityName} · ` : ''}{evt.state}</span>
-              </div>
-              <div className="popup-coords mono" style={{ fontSize: '0.7rem', color: 'var(--brand)', marginBottom: '0.35rem' }}>
-                📍 {parseFloat(evt.latitude).toFixed(4)}° N, {parseFloat(evt.longitude).toFixed(4)}° E
-              </div>
-
-              <div className="popup-sensor-badge">
-                <Radio size={12} style={{ color: isFastTrigger ? '#f97316' : '#38BDF8' }} />
-                <span>{evt.satellite || 'VIIRS / MODIS'}</span>
-              </div>
-
-              <div className="popup-metrics grid-2">
-                <div>
-                  <span className="popup-label">Risk Score:</span>
-                  <span className="popup-val mono" style={{ color: markerProps.color, fontWeight: 700 }}>
-                    {(markerProps.score * 100).toFixed(1)}% ({markerProps.label})
-                  </span>
-                </div>
-                <div>
-                  <span className="popup-label">FRP Power:</span>
-                  <span className="popup-val mono text-thermal">{evt.frp} MW</span>
-                </div>
-                <div>
-                  <span className="popup-label">Brightness:</span>
-                  <span className="popup-val mono">{evt.bright_ti4} K</span>
-                </div>
-                <div>
-                  <span className="popup-label">Acquired:</span>
-                  <span className="popup-val mono">{evt.acq_date} {evt.acq_time}</span>
-                </div>
-                {evt.landcover_class && (
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <span className="popup-label">Sentinel-2 Landcover:</span>
-                    <span className="popup-val mono" style={{ color: '#38BDF8' }}>🌱 {evt.landcover_class}</span>
-                  </div>
-                )}
-              </div>
-
-              {(evt.reason || evt.diagnosis) && (
-                <div className="popup-reason-box" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', background: 'var(--page-bg)', padding: '5px 7px', borderRadius: '4px', marginBottom: '0.6rem', borderLeft: `3px solid ${markerProps.color}`, lineHeight: 1.3 }}>
-                  <strong style={{ color: markerProps.color }}>Diagnosis:</strong> {evt.reason || evt.diagnosis}
-                </div>
-              )}
-
-              <div className="popup-actions" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <button
-                  className="btn btn-sm btn-primary full-w"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)', border: 'none' }}
-                  onClick={() => setSelectedXaiEvent(evt)}
-                >
-                  <Cpu size={12} />
-                  <span>Inspect Explainable AI (TreeSHAP)</span>
-                </button>
-                <button
-                  className="btn btn-sm btn-secondary full-w"
-                  onClick={() => navigate(`/event/${evt.id || evt.eventId}`)}
-                >
-                  <Eye size={12} />
-                  <span>Multi-Sensor Deep Analysis</span>
-                </button>
-              </div>
-            </div>
-          </Popup>
-        );
-      })()}
     </>
   );
 }
@@ -243,7 +226,6 @@ export default function ThermalMap({ events = [], height = '540px', onSelectEven
   const initialCenter = center || DEFAULT_CENTER;
   const initialZoom = zoom !== undefined ? zoom : DEFAULT_ZOOM;
   const [viewport, setViewport] = useState({ zoom: initialZoom, bounds: null });
-  const [activePopupEvent, setActivePopupEvent] = useState(null);
 
   const handleViewportChange = useCallback((vp) => {
     setViewport(vp);
@@ -414,8 +396,6 @@ export default function ThermalMap({ events = [], height = '540px', onSelectEven
           bounds={viewport.bounds}
           onSelectEvent={onSelectEvent}
           setSelectedXaiEvent={setSelectedXaiEvent}
-          activePopupEvent={activePopupEvent}
-          setActivePopupEvent={setActivePopupEvent}
           navigate={navigate}
         />
       </MapContainer>

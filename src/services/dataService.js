@@ -176,12 +176,16 @@ export function resolveIndianState(item) {
 // Medium / Yellow: 0.4 <= risk_score < 0.6
 // Low / Green: risk_score < 0.4
 export function getNormalizedRiskScore(evt) {
-    if (!evt) return 0.2;
+    if (!evt) return 0.25;
     let score = null;
-    if (evt.risk_score != null && evt.risk_score !== "") {
-        score = parseFloat(evt.risk_score);
-    } else if (evt.riskScore != null && evt.riskScore !== "") {
+    if (evt.riskScore != null && evt.riskScore !== "" && !isNaN(Number(evt.riskScore))) {
         score = parseFloat(evt.riskScore);
+    } else if (evt.risk_score != null && evt.risk_score !== "" && !isNaN(Number(evt.risk_score))) {
+        score = parseFloat(evt.risk_score);
+    }
+    if (score == null || isNaN(score)) {
+        const calculated = calculateRisk(evt);
+        score = calculated.riskScore;
     }
     if (score == null || isNaN(score)) {
         return 0.25;
@@ -239,17 +243,12 @@ export function getMarkerRiskProps(evt, zoom = 5) {
     const score = getNormalizedRiskScore(evt);
     const tier = getRiskTier(score);
 
-    // Calculate base radius by tier
-    let baseRadius = 4;
-    if (score >= 0.8) baseRadius = 10;
-    else if (score >= 0.6) baseRadius = 7.5;
-    else if (score >= 0.4) baseRadius = 5.5;
+    // Uniform, calibrated base radius with continuous scaling (4.5px to 7.5px)
+    const baseRadius = 4.5 + (score * 3.0);
 
-    // Zoom multiplier
-    const zoomFactor = zoom <= 3 ? 0.65 : zoom <= 5 ? 0.9 : zoom <= 8 ? 1.2 : 1.5;
-    // Score scaling adds continuous proportional magnitude
-    const scoreBoost = 1.0 + (score * 0.35);
-    const radius = Math.round(baseRadius * zoomFactor * scoreBoost);
+    // Smooth zoom scaling across Indian subcontinent map views
+    const zoomFactor = zoom <= 3 ? 0.75 : zoom <= 5 ? 0.95 : zoom <= 8 ? 1.2 : 1.45;
+    const radius = Math.round(baseRadius * zoomFactor);
 
     return {
         score,
@@ -257,8 +256,8 @@ export function getMarkerRiskProps(evt, zoom = 5) {
         label: tier.label,
         color: tier.color,
         fillColor: tier.fillColor,
-        radius: Math.max(3, Math.min(24, radius)),
-        weight: score >= 0.8 ? 2.5 : score >= 0.6 ? 2.0 : 1.2
+        radius: Math.max(3, Math.min(16, radius)),
+        weight: score >= 0.8 ? 2.0 : score >= 0.6 ? 1.5 : 1.0
     };
 }
 

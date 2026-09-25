@@ -321,13 +321,13 @@ export default function EventDetail() {
     event.eventType ||
     "Unknown";
 
-  const effectiveScore = Math.round(
-    event.risk_score != null && event.risk_score !== ""
-      ? parseFloat(event.risk_score)
-      : event.riskScore != null
-      ? parseFloat(event.riskScore)
-      : 50
-  );
+  const rawRiskScore = event.riskScore != null && event.riskScore !== "" && !isNaN(Number(event.riskScore))
+    ? (parseFloat(event.riskScore) <= 1.0 ? parseFloat(event.riskScore) * 100 : parseFloat(event.riskScore))
+    : event.risk_score != null && event.risk_score !== "" && !isNaN(Number(event.risk_score))
+    ? (parseFloat(event.risk_score) <= 1.0 ? parseFloat(event.risk_score) * 100 : parseFloat(event.risk_score))
+    : 50;
+
+  const effectiveScore = Math.min(100, Math.max(0, Math.round(rawRiskScore)));
 
   const effectiveRisk =
     effectiveScore >= 75
