@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Moon, Sun } from 'lucide-react';
+import ApiStatusBadge from './ApiStatusBadge';
 
 export default function Navbar() {
   const location = useLocation();
@@ -104,6 +105,10 @@ export default function Navbar() {
           >
             All Anomalies
           </NavLink>
+
+          <div className="navbar-status-slot">
+            <ApiStatusBadge />
+          </div>
 
           <button
             type="button"

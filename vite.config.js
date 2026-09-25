@@ -6,6 +6,14 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
-    host: true
+    host: true,
+    proxy: {
+      '/ml-api': {
+        target: 'https://thermal-anomaly-api.onrender.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ml-api/, ''),
+        secure: false
+      }
+    }
   }
 })

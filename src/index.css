@@ -12,10 +12,11 @@
   --brand: #FF6A3D;
   --brand-dark: #E14F1F;
   
-  --critical: #FF3B47;
-  --high: #FF9F1C;
-  --medium: #FFD23F;
-  --normal: #34D399;
+  --critical: #dc2626;
+  --high: #f97316;
+  --medium: #facc15;
+  --normal: #22c55e;
+  --low: #22c55e;
   --persistent: #38BDF8;
   
   --industrial: #A78BFA;
@@ -194,29 +195,29 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .badge-critical {
-  background-color: rgba(255, 59, 71, 0.18);
+  background-color: rgba(220, 38, 38, 0.18);
   color: var(--critical);
-  border: 1px solid rgba(255, 59, 71, 0.4);
+  border: 1px solid rgba(220, 38, 38, 0.4);
 }
 
 .badge-high {
-  background-color: rgba(255, 159, 28, 0.18);
+  background-color: rgba(249, 115, 22, 0.18);
   color: var(--high);
-  border: 1px solid rgba(255, 159, 28, 0.4);
+  border: 1px solid rgba(249, 115, 22, 0.4);
 }
 
 .badge-mid,
 .badge-medium {
-  background-color: rgba(255, 210, 63, 0.18);
+  background-color: rgba(250, 204, 21, 0.18);
   color: var(--medium);
-  border: 1px solid rgba(255, 210, 63, 0.4);
+  border: 1px solid rgba(250, 204, 21, 0.4);
 }
 
 .badge-low,
 .badge-normal {
-  background-color: rgba(52, 211, 153, 0.18);
+  background-color: rgba(34, 197, 94, 0.18);
   color: var(--normal);
-  border: 1px solid rgba(52, 211, 153, 0.4);
+  border: 1px solid rgba(34, 197, 94, 0.4);
 }
 
 .badge-persistent {

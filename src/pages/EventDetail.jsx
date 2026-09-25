@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ContextMap from "../components/ContextMap";
 import RiskScoreGauge from "../components/RiskScoreGauge";
-import { loadEventsData } from "../services/dataService";
+import { loadEventsData, fetchMlPrediction, getNormalizedRiskScore, getRiskTier } from "../services/dataService";
 
 import {
   Flame,
@@ -119,26 +119,11 @@ export default function EventDetail() {
     if (!evt) return;
     setIsPredicting(true);
     try {
-      const res = await fetch("http://localhost:5001/api/predict", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          latitude: evt.latitude,
-          longitude: evt.longitude,
-          frp: evt.frp || evt.max_frp || 5.0,
-          bright_ti4: evt.bright_ti4 || evt.max_bright_ti4 || 325.0,
-          bright_ti5: evt.bright_ti5 || evt.max_bright_ti5 || 285.0,
-          confidence: evt.confidence || "nominal",
-          acq_date: evt.acq_date || "2026-08-26"
-        })
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.prediction) {
-          setMlData(json.prediction);
-          if (json.prediction.predicted_class) {
-            setCurrentClassification(json.prediction.predicted_class);
-          }
+      const pred = await fetchMlPrediction(evt);
+      if (pred) {
+        setMlData(pred);
+        if (pred.predicted_class) {
+          setCurrentClassification(pred.predicted_class);
         }
       }
     } catch (err) {

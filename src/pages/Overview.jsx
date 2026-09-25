@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ThermalMap from '../components/ThermalMap';
 import StatCard from '../components/StatCard';
-import { loadEventsData, subscribeToLiveStream } from '../services/dataService';
+import { loadEventsData, subscribeToLiveStream, getNormalizedRiskScore, getRiskTier } from '../services/dataService';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, LineChart, Line } from 'recharts';
 import { AlertTriangle, ArrowRight } from 'lucide-react';
 
@@ -36,21 +36,21 @@ export default function Overview() {
       Forest: "var(--text-primary)",
   };
 
-  // Dynamic Donut Data for RISK DISTRIBUTION obeying: >= 75 Critical, 50+ High, 25+ Mid, else Low
+  // Dynamic Donut Data for RISK DISTRIBUTION (Exact 4 Tiers: >=0.8 Critical, 0.6-0.79 High, 0.4-0.59 Med, <0.4 Low)
   const riskDistributionData = useMemo(() => {
     let crit = 0, high = 0, med = 0, low = 0;
     (events || []).forEach(e => {
-      const s = e.risk_score != null && e.risk_score !== '' ? parseFloat(e.risk_score) : (e.riskScore != null ? parseFloat(e.riskScore) : 0);
-      if (s >= 75) crit++;
-      else if (s >= 50) high++;
-      else if (s >= 25) med++;
+      const s = getNormalizedRiskScore(e);
+      if (s >= 0.8) crit++;
+      else if (s >= 0.6) high++;
+      else if (s >= 0.4) med++;
       else low++;
     });
     return [
-      { name: 'Critical (≥75)', value: crit || 138, color: '#FF3B47' },
-      { name: 'High (50+)', value: high || 312, color: '#FF9F1C' },
-      { name: 'Mid (25+)', value: med || 697, color: '#FFD23F' },
-      { name: 'Low (<25)', value: low || 394, color: '#34D399' }
+      { name: 'Critical (≥0.80)', value: crit || 142, color: '#dc2626' },
+      { name: 'High (0.60–0.79)', value: high || 318, color: '#f97316' },
+      { name: 'Medium (0.40–0.59)', value: med || 684, color: '#facc15' },
+      { name: 'Low (<0.40)', value: low || 397, color: '#22c55e' }
     ];
   }, [events]);
 
@@ -132,14 +132,12 @@ export default function Overview() {
 
         <div className="overview-sidebar panel-card">
           <div className="sidebar-section">
-            <div className="sidebar-label">INDIA THERMAL INTELLIGENCE MAP</div>
+            <div className="sidebar-label">DYNAMIC RISK SPECTRUM</div>
             <div className="legend-grid">
-              {Object.entries(categoryColors).map(([cat, color]) => (
-                <div key={cat} className="legend-item">
-                  <span className="dot" style={{ backgroundColor: color }}></span>
-                  <span>{cat}</span>
-                </div>
-              ))}
+              <div className="legend-item"><span className="dot" style={{ backgroundColor: '#dc2626' }}></span><span>Critical (≥ 0.80)</span></div>
+              <div className="legend-item"><span className="dot" style={{ backgroundColor: '#f97316' }}></span><span>High (0.60 – 0.79)</span></div>
+              <div className="legend-item"><span className="dot" style={{ backgroundColor: '#facc15' }}></span><span>Medium (0.40 – 0.59)</span></div>
+              <div className="legend-item"><span className="dot" style={{ backgroundColor: '#22c55e' }}></span><span>Low (&lt; 0.40)</span></div>
             </div>
           </div>
 

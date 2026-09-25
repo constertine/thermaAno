@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, Circle } from 'react-leaflet';
 import { Flame, Layers } from 'lucide-react';
+import { getMarkerRiskProps } from '../services/dataService';
 
 export default function ContextMap({ event, height = '360px' }) {
   const [mapLayer, setMapLayer] = useState('satellite');
@@ -83,29 +84,34 @@ export default function ContextMap({ event, height = '360px' }) {
           </CircleMarker>
         )}
 
-        {/* Selected Anomaly Target Marker */}
-        <CircleMarker
-          center={[event.latitude, event.longitude]}
-          radius={10}
-          pathOptions={{
-            color: '#E14F1F',
-            fillColor: '#FF6A3D',
-            fillOpacity: 0.9,
-            weight: 2
-          }}
-        >
-          <Popup>
-            <div className="mono text-thermal" style={{ fontSize: '0.8rem', fontWeight: 700 }}>
-              {event.eventId} (TARGET ANOMALY)
-            </div>
-            <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>
-              FRP: <strong>{event.frp} MW</strong> | Brightness: <strong>{event.bright_ti4} K</strong>
-            </div>
-            <div style={{ fontSize: '0.72rem', marginTop: '3px', color: 'var(--text-secondary)' }}>
-              Classification: <strong>{event.predicted_class || event.eventType}</strong>
-            </div>
-          </Popup>
-        </CircleMarker>
+        {/* Selected Anomaly Target Marker with Dynamic Risk Styling */}
+        {(() => {
+          const markerProps = getMarkerRiskProps(event, 12);
+          return (
+            <CircleMarker
+              center={[event.latitude, event.longitude]}
+              radius={Math.max(10, markerProps.radius)}
+              pathOptions={{
+                color: markerProps.color,
+                fillColor: markerProps.fillColor,
+                fillOpacity: 0.92,
+                weight: markerProps.weight
+              }}
+            >
+              <Popup>
+                <div className="mono" style={{ fontSize: '0.8rem', fontWeight: 700, color: markerProps.color }}>
+                  {event.eventId} (TARGET ANOMALY — {markerProps.label.toUpperCase()})
+                </div>
+                <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>
+                  Risk Score: <strong style={{ color: markerProps.color }}>{(markerProps.score * 100).toFixed(1)}%</strong> | FRP: <strong>{event.frp} MW</strong>
+                </div>
+                <div style={{ fontSize: '0.72rem', marginTop: '3px', color: 'var(--text-secondary)' }}>
+                  Classification: <strong>{event.predicted_class || event.eventType}</strong>
+                </div>
+              </Popup>
+            </CircleMarker>
+          );
+        })()}
       </MapContainer>
 
       <style>{`
