@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ThermalMap from '../components/ThermalMap';
-import StatCard from '../components/StatCard';
 import { loadEventsData, subscribeToLiveStream } from '../services/dataService';
 import { AlertTriangle } from 'lucide-react';
 
@@ -29,16 +28,6 @@ export default function Overview() {
     return [...(events || [])]
       .sort((a, b) => (parseFloat(b.risk_score || b.riskScore || 0)) - (parseFloat(a.risk_score || a.riskScore || 0)))
       .slice(0, 3);
-  }, [events]);
-
-  const stats = useMemo(() => {
-    const total = events.length;
-    const industrial = events.filter(e => e.eventType === 'Industrial' || e.predicted_class?.includes('Industrial')).length;
-    const highRisk = events.filter(e => parseFloat(e.risk_score || e.riskScore || 0) >= 50).length;
-    const persistent = events.filter(e => e.persistence).length;
-    const newEvents = events.filter(e => e.is_flash_trigger || e.is_early_warning || e.satellite?.includes('INSAT') || e.satellite?.includes('Himawari')).length;
-    const activeAlerts = events.filter(e => parseFloat(e.risk_score || e.riskScore || 0) >= 75 || e.is_early_warning).length;
-    return { total, industrial, highRisk, persistent, newEvents, activeAlerts };
   }, [events]);
 
   return (
@@ -97,16 +86,6 @@ export default function Overview() {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* SCREENSHOT 3: STATS CARDS GRID */}
-      <div className="stats-grid-6 margin-top-large">
-        <StatCard title="ACTIVE THERMAL EVENTS" value={stats.total} type="active" />
-        <StatCard title="INDUSTRIAL EVENTS" value={stats.industrial} type="industrial" />
-        <StatCard title="High/Critical Risk" value={stats.highRisk} type="highRisk" />
-        <StatCard title="PERSISTENT SOURCES" value={stats.persistent} type="persistent" />
-        <StatCard title="LIVE SENSOR SPIKES" value={stats.newEvents} type="newEvent" />
-        <StatCard title="ACTIVE ALERTS" value={stats.activeAlerts} type="alerts" />
       </div>
 
       <style>{`
@@ -236,22 +215,7 @@ export default function Overview() {
           cursor: pointer;
         }
 
-        .margin-top-large {
-          margin-top: 2rem;
-        }
-
-        .margin-top-larger{
-          margin-top:20px;
-        }
-
-        .stats-grid-6 {
-          display: grid;
-          grid-template-columns: repeat(6, 1fr);
-          gap: 1.25rem;
-        }
-
         @media (max-width: 1200px) {
-          .stats-grid-6 { grid-template-columns: repeat(3, 1fr); }
           .map-and-sidebar-grid { grid-template-columns: 1fr; }
         }
       `}</style>
