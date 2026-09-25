@@ -140,14 +140,34 @@ export default function EventDetail() {
       .then((events) => {
         if (!mounted) return;
 
-        const found =
-          events.find(
-            (e) =>
-              String(e.id) === String(eventId) ||
-              e.eventId === eventId ||
-              e.event_id === eventId ||
-              String(e.firmsId) === String(eventId)
-          ) || events[0];
+        const cleanParam = String(eventId || "").trim();
+        let found = events.find(
+          (e) =>
+            e &&
+            (String(e.id) === cleanParam ||
+              String(e.eventId) === cleanParam ||
+              String(e.event_id) === cleanParam ||
+              String(e.firmsId) === cleanParam ||
+              String(e.firms_id) === cleanParam ||
+              String(e.grid_key) === cleanParam)
+        );
+
+        // If not found by direct string match, try numeric ID / index match
+        if (!found && cleanParam) {
+          const numericTarget = parseInt(cleanParam.replace(/\D/g, ""), 10);
+          if (!isNaN(numericTarget) && numericTarget > 0) {
+            found = events.find((e) => {
+              if (!e) return false;
+              const eNum = parseInt(String(e.id || e.eventId || e.firmsId || "").replace(/\D/g, ""), 10);
+              return eNum === numericTarget;
+            });
+          }
+        }
+
+        // Only fallback to events[0] if completely unmatched
+        if (!found && events.length > 0) {
+          found = events[0];
+        }
 
         setEvent(found);
 

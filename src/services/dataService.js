@@ -46,12 +46,50 @@ const indianStateCenters = [
 
 const stateAliases = {
     TamilNadu: "Tamil Nadu",
+    "Tamil Nadu": "Tamil Nadu",
     AndhraPradesh: "Andhra Pradesh",
+    "Andhra Pradesh": "Andhra Pradesh",
     WestBengal: "West Bengal",
+    "West Bengal": "West Bengal",
     MadhyaPradesh: "Madhya Pradesh",
+    "Madhya Pradesh": "Madhya Pradesh",
     UttarPradesh: "Uttar Pradesh",
+    "Uttar Pradesh": "Uttar Pradesh",
     HimachalPradesh: "Himachal Pradesh",
+    "Himachal Pradesh": "Himachal Pradesh",
     JammuKashmir: "Jammu & Kashmir",
+    JammuAndKashmir: "Jammu & Kashmir",
+    "Jammu & Kashmir": "Jammu & Kashmir",
+    ArunachalPradesh: "Arunachal Pradesh",
+    "Arunachal Pradesh": "Arunachal Pradesh",
+    NCTofDelhi: "Delhi",
+    Delhi: "Delhi",
+    Maharashtra: "Maharashtra",
+    Karnataka: "Karnataka",
+    Kerala: "Kerala",
+    Gujarat: "Gujarat",
+    Rajasthan: "Rajasthan",
+    Punjab: "Punjab",
+    Haryana: "Haryana",
+    Odisha: "Odisha",
+    Orissa: "Odisha",
+    Chhattisgarh: "Chhattisgarh",
+    Jharkhand: "Jharkhand",
+    Bihar: "Bihar",
+    Assam: "Assam",
+    Telangana: "Telangana",
+    Goa: "Goa",
+    Uttarakhand: "Uttarakhand",
+    Uttaranchal: "Uttarakhand",
+    Manipur: "Manipur",
+    Meghalaya: "Meghalaya",
+    Mizoram: "Mizoram",
+    Nagaland: "Nagaland",
+    Tripura: "Tripura",
+    Sikkim: "Sikkim",
+    Ladakh: "Ladakh",
+    Puducherry: "Puducherry",
+    Chandigarh: "Chandigarh",
 };
 
 // Simplified India boundary polygon (lat, lon pairs tracing the approximate border)
@@ -121,45 +159,59 @@ export function isInsideIndia(lat, lon) {
 }
 
 export function resolveIndianState(item) {
+    if (!item) return "India";
+
+    // 1. If a valid known state is already provided in the item (e.g. from dataset or GIS metadata)
+    const rawState = item.state || item.province || item.region;
+    if (rawState) {
+        const normalized = stateAliases[rawState] || stateAliases[rawState.replace(/\s+/g, '')];
+        if (normalized) return normalized;
+        if (indianStateCenters.some(([st]) => st.toLowerCase() === String(rawState).toLowerCase())) {
+            return rawState;
+        }
+    }
+
     const latitude = Number(item.latitude);
     const longitude = Number(item.longitude);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
         return stateAliases[item.state] || item.state || "India";
     }
 
-    // Offshore Oil & Gas Flare Platforms (Arabian Sea & Bay of Bengal)
+    // 2. Offshore Oil & Gas Flare Platforms (Arabian Sea & Bay of Bengal)
     if (latitude >= 18.2 && latitude <= 20.5 && longitude >= 70.0 && longitude <= 72.5) return "Arabian Sea (Bombay High Offshore)";
     if (latitude >= 15.5 && latitude <= 17.5 && longitude >= 81.8 && longitude <= 83.8) return "Bay of Bengal (KG Basin Offshore)";
     if (latitude >= 20.5 && latitude <= 22.0 && longitude >= 71.8 && longitude <= 72.8) return "Gulf of Khambhat (Offshore Marine Zone)";
 
-    // Precise bounding boxes for Indian States
-    if (latitude >= 23.0 && latitude <= 30.2 && longitude >= 69.5 && longitude <= 78.3) return "Rajasthan";
-    if (latitude >= 21.1 && latitude <= 26.9 && longitude >= 74.0 && longitude <= 82.8) return "Madhya Pradesh";
+    // 3. Southern States First (to avoid false assignment to central states)
+    if (latitude >= 8.2 && latitude <= 12.8 && longitude >= 74.8 && longitude <= 77.4) return "Kerala";
+    if (latitude >= 8.0 && latitude <= 13.5 && longitude >= 76.2 && longitude <= 80.4) return "Tamil Nadu";
+    if (latitude >= 14.8 && latitude <= 15.8 && longitude >= 73.6 && longitude <= 74.4) return "Goa";
+    if (latitude >= 11.5 && latitude <= 18.4 && longitude >= 74.0 && longitude <= 78.6) return "Karnataka";
+    if (latitude >= 12.6 && latitude <= 19.2 && longitude >= 76.8 && longitude <= 84.8) return "Andhra Pradesh";
+    if (latitude >= 15.8 && latitude <= 19.9 && longitude >= 77.2 && longitude <= 81.8) return "Telangana";
+
+    // 4. Western & Central States
+    if (latitude >= 15.6 && latitude <= 22.1 && longitude >= 72.6 && longitude <= 80.9) return "Maharashtra";
     if (latitude >= 20.1 && latitude <= 24.7 && longitude >= 68.1 && longitude <= 74.5) return "Gujarat";
-    if (latitude >= 15.6 && latitude <= 22.0 && longitude >= 72.6 && longitude <= 80.9) return "Maharashtra";
     if (latitude >= 17.8 && latitude <= 24.1 && longitude >= 80.2 && longitude <= 84.4) return "Chhattisgarh";
     if (latitude >= 17.8 && latitude <= 22.6 && longitude >= 81.4 && longitude <= 87.5) return "Odisha";
-    if (latitude >= 23.9 && latitude <= 30.4 && longitude >= 77.1 && longitude <= 84.6) return "Uttar Pradesh";
-    if (latitude >= 15.8 && latitude <= 19.9 && longitude >= 77.2 && longitude <= 81.8) return "Telangana";
-    if (latitude >= 12.6 && latitude <= 19.2 && longitude >= 76.8 && longitude <= 84.8) return "Andhra Pradesh";
-    if (latitude >= 11.5 && latitude <= 18.5 && longitude >= 74.0 && longitude <= 78.6) return "Karnataka";
-    if (latitude >= 8.0 && latitude <= 13.5 && longitude >= 76.2 && longitude <= 80.3) return "Tamil Nadu";
-    if (latitude >= 8.3 && latitude <= 12.8 && longitude >= 74.8 && longitude <= 77.4) return "Kerala";
-    if (latitude >= 24.3 && latitude <= 27.5 && longitude >= 83.3 && longitude <= 88.3) return "Bihar";
+    if (latitude >= 21.1 && latitude <= 26.9 && longitude >= 74.0 && longitude <= 82.8) return "Madhya Pradesh";
+
+    // 5. Eastern & Northern States
+    if (latitude >= 23.0 && latitude <= 30.2 && longitude >= 69.5 && longitude <= 78.3) return "Rajasthan";
     if (latitude >= 21.9 && latitude <= 25.3 && longitude >= 83.3 && longitude <= 87.9) return "Jharkhand";
     if (latitude >= 21.5 && latitude <= 27.2 && longitude >= 85.8 && longitude <= 89.9) return "West Bengal";
-    if (latitude >= 29.5 && latitude <= 32.5 && longitude >= 73.9 && longitude <= 76.9) return "Punjab";
+    if (latitude >= 24.3 && latitude <= 27.5 && longitude >= 83.3 && longitude <= 88.3) return "Bihar";
+    if (latitude >= 23.9 && latitude <= 30.4 && longitude >= 77.1 && longitude <= 84.6) return "Uttar Pradesh";
+    if (latitude >= 28.4 && latitude <= 28.9 && longitude >= 76.8 && longitude <= 77.4) return "Delhi";
     if (latitude >= 27.6 && latitude <= 30.9 && longitude >= 74.5 && longitude <= 77.6) return "Haryana";
-    if (latitude >= 30.4 && latitude <= 33.2 && longitude >= 75.6 && longitude <= 79.0) return "Himachal Pradesh";
+    if (latitude >= 29.5 && latitude <= 32.5 && longitude >= 73.9 && longitude <= 76.9) return "Punjab";
     if (latitude >= 28.7 && latitude <= 31.5 && longitude >= 77.6 && longitude <= 81.0) return "Uttarakhand";
+    if (latitude >= 30.4 && latitude <= 33.2 && longitude >= 75.6 && longitude <= 79.0) return "Himachal Pradesh";
     if (latitude >= 32.2 && latitude <= 37.1 && longitude >= 73.5 && longitude <= 80.3) return "Jammu & Kashmir";
     if (latitude >= 24.1 && latitude <= 28.0 && longitude >= 89.7 && longitude <= 96.0) return "Assam";
 
-    const providedState = stateAliases[item.state] || item.state;
-    if (indianStateCenters.some(([state]) => state === providedState)) {
-        return providedState;
-    }
-
+    // 6. Closest Euclidean distance to centroid fallback
     return indianStateCenters.reduce(
         (nearest, [state, stateLat, stateLon]) => {
             const distance =
@@ -476,11 +528,25 @@ export function normalizeEvent(item, index) {
     const risk_level = riskTier.label;
     const riskScore = parseFloat((normalizedRisk * 100).toFixed(1));
 
-    const firmsId = item.firms_id || item.firmsId || index + 1;
-    const eventId =
-        item.eventId ||
-        item.event_id ||
-        `EVT-2026-${String(firmsId).padStart(5, "0")}`;
+    const isLive = Boolean(
+        item.is_live === true ||
+        (item.eventId && String(item.eventId).includes("LIVE")) ||
+        (item.id && String(item.id).includes("LIVE")) ||
+        item.is_early_warning ||
+        item.is_flash_trigger
+    );
+
+    const baseId = item.firms_id || item.firmsId || (item.id && !String(item.id).startsWith("EVT-") ? item.id : null) || item.grid_key || (index != null ? index + 1 : 1);
+    let computedEventId = item.eventId || item.event_id || (item.id && String(item.id).startsWith("EVT-") ? item.id : null);
+    if (!computedEventId) {
+        if (isLive) {
+            computedEventId = `EVT-LIVE-${String(index + 1).padStart(4, "0")}`;
+        } else {
+            computedEventId = `EVT-2026-${String(baseId).padStart(5, "0")}`;
+        }
+    }
+    const finalId = computedEventId;
+    const firmsId = item.firmsId || item.firms_id || baseId;
 
     const distM = parseFloat(item.dist_to_facility_m || 0);
     const distKm = parseFloat(
@@ -539,9 +605,9 @@ export function normalizeEvent(item, index) {
 
     return {
         ...item,
-        id: firmsId,
-        eventId,
-        event_id: item.event_id || eventId,
+        id: finalId,
+        eventId: computedEventId,
+        event_id: computedEventId,
         firmsId,
         latitude: lat,
         longitude: lon,
