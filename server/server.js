@@ -131,64 +131,35 @@ app.post('/api/events/sync-live', async (req, res) => {
   }
 });
 
-// 3. Get 30-Day Historical Baseline Dataset (Strictly Baseline, No Live Pollution)
+// 3. Get 30-Day Historical Baseline Dataset (Strictly Updated ML Classified Dataset)
 app.get(['/api/events/30days', '/api/events/baseline'], async (req, res) => {
-  const limit = parseInt(req.query.limit || '2000', 10);
   try {
-    const result = await query(`
-      SELECT * FROM thermal_events
-      WHERE event_id NOT LIKE 'EVT-LIVE-%'
-      ORDER BY id ASC
-      LIMIT $1;
-    `, [limit]);
-
-    if (result.rows.length > 0) {
-      return res.json({
-        success: true,
-        count: result.rows.length,
-        events: result.rows.map(r => ({
-          ...r,
-          id: r.id,
-          eventId: r.event_id,
-          latitude: parseFloat(r.latitude),
-          longitude: parseFloat(r.longitude),
-          frp: parseFloat(r.frp),
-          bright_ti4: parseFloat(r.bright_ti4),
-          bright_ti5: parseFloat(r.bright_ti5),
-          riskScore: parseFloat(r.risk_score),
-          dist_to_facility_km: parseFloat(r.dist_to_facility_km),
-          dist_to_facility_m: parseFloat(r.dist_to_facility_m),
-          facilityName: r.facility_name,
-          facilityType: r.facility_type,
-          eventType: r.event_type
-        }))
-      });
-    }
-
-    // Fallback to local JSON if DB empty
     const fs = await import('fs');
     const path = await import('path');
     const eventsPath = path.resolve(__dirname, '../public/data/events.json');
-    const localEvents = JSON.parse(fs.readFileSync(eventsPath, 'utf8'));
-    res.json({
-      success: true,
-      count: localEvents.length,
-      events: localEvents
-    });
-  } catch (err) {
-    try {
-      const fs = await import('fs');
-      const path = await import('path');
-      const eventsPath = path.resolve(__dirname, '../public/data/events.json');
+    if (fs.existsSync(eventsPath)) {
       const localEvents = JSON.parse(fs.readFileSync(eventsPath, 'utf8'));
-      res.json({
+      return res.json({
         success: true,
         count: localEvents.length,
         events: localEvents
       });
-    } catch (fallbackErr) {
-      res.status(500).json({ success: false, error: err.message });
     }
+
+    const result = await query(`
+      SELECT * FROM thermal_events
+      WHERE event_id NOT LIKE 'EVT-LIVE-%'
+      ORDER BY id ASC
+      LIMIT 1000;
+    `);
+
+    res.json({
+      success: true,
+      count: result.rows.length,
+      events: result.rows
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

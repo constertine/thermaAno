@@ -818,23 +818,29 @@ export async function loadEventsData() {
         let baselineList = [];
         let liveList = [];
 
-        // 1. Fetch 30-Day Baseline Dataset
+        // 1. Fetch Updated 30-Day Baseline Dataset from classified_thermal_anomalies.csv
         try {
-            const res = await fetch(`${API_BASE_URL}/api/events/30days?limit=2000`);
-            if (res.ok) {
-                const data = await res.json();
-                if (data.success && Array.isArray(data.events) && data.events.length > 0) {
-                    baselineList = data.events.map((item, idx) => ({
-                        ...normalizeEvent(item, idx),
-                        is_live: false
-                    }));
+            const csvRes = await fetch("/data/classified_thermal_anomalies.csv");
+            if (csvRes.ok) {
+                const csvText = await csvRes.text();
+                if (csvText.includes("latitude")) {
+                    const parsed = Papa.parse(csvText, { header: true, dynamicTyping: true, skipEmptyLines: true });
+                    if (Array.isArray(parsed.data) && parsed.data.length > 0) {
+                        baselineList = parsed.data
+                            .filter(r => r.latitude && r.longitude && isInsideIndia(r.latitude, r.longitude))
+                            .map((item, idx) => ({
+                                ...normalizeEvent(item, idx),
+                                is_live: false
+                            }));
+                        console.log(`✅ Loaded ${baselineList.length} updated 30-day baseline events from classified_thermal_anomalies.csv`);
+                    }
                 }
             }
         } catch (e) {
-            console.log("ℹ️ Backend 30-day baseline API offline or unreachable, using local dataset fallback.", e.message);
+            console.log("ℹ️ classified_thermal_anomalies.csv fallback check:", e.message);
         }
 
-        // Fallback to /data/events.json if baseline not fetched from API
+        // Secondary fallback to /data/events.json or backend API if CSV not loaded
         if (baselineList.length === 0) {
             try {
                 const response = await fetch("/data/events.json");
@@ -846,7 +852,7 @@ export async function loadEventsData() {
                     }));
                 }
             } catch (e) {
-                console.warn("JSON fallback fetch failed:", e.message);
+                console.warn("JSON fallback fetch notice:", e.message);
             }
         }
 
