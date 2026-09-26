@@ -1,8 +1,12 @@
 {
   "rewrites": [
     {
-      "source": "/ml-api/:path*",
-      "destination": "https://thermal-anomaly-api.onrender.com/:path*"
+      "source": "/ml-api/:match*",
+      "destination": "https://thermal-anomaly-api.onrender.com/:match*"
+    },
+    {
+      "source": "/ml-api",
+      "destination": "https://thermal-anomaly-api.onrender.com/"
     },
     {
       "source": "/(.*)",
