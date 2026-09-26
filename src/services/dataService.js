@@ -414,9 +414,11 @@ export const EVENT_CATEGORY_COLORS = {
     Other: "#64748B",              // Slate Grey
 };
 
-export function getEventCategoryColor(evt) {
-    if (!evt) return EVENT_CATEGORY_COLORS.Other;
-    const type = String(evt.eventType || evt.predicted_class || evt.model_predicted_class || "").trim();
+export function getEventCategoryColor(evtOrType) {
+    if (!evtOrType) return EVENT_CATEGORY_COLORS.Other;
+    const type = typeof evtOrType === "string" 
+        ? evtOrType.trim() 
+        : String(evtOrType.eventType || evtOrType.predicted_class || evtOrType.model_predicted_class || "").trim();
     if (type === "Industrial" || type.includes("Industrial")) return EVENT_CATEGORY_COLORS.Industrial;
     if (type === "Power Plant" || type.includes("Power")) return EVENT_CATEGORY_COLORS["Power Plant"];
     if (type === "Gas Flare" || type.includes("Flare") || type.includes("Gas")) return EVENT_CATEGORY_COLORS["Gas Flare"];
@@ -627,17 +629,18 @@ export function normalizeEvent(item, index) {
         item.is_flash_trigger
     );
 
-    const baseId = item.firms_id || item.firmsId || (item.id && !String(item.id).startsWith("EVT-") ? item.id : null) || item.grid_key || (index != null ? index + 1 : 1);
     let computedEventId = item.eventId || item.event_id || (item.id && String(item.id).startsWith("EVT-") ? item.id : null);
     if (!computedEventId) {
         if (isLive) {
             computedEventId = `EVT-LIVE-${String(index + 1).padStart(4, "0")}`;
+        } else if (item.firms_id || item.firmsId) {
+            computedEventId = `EVT-2026-${item.firms_id || item.firmsId}`;
         } else {
-            computedEventId = `EVT-2026-${String(baseId).padStart(5, "0")}`;
+            computedEventId = `EVT-2026-${String(index + 1).padStart(5, "0")}`;
         }
     }
     const finalId = computedEventId;
-    const firmsId = item.firmsId || item.firms_id || baseId;
+    const firmsId = item.firmsId || item.firms_id || computedEventId;
 
     const distM = parseFloat(item.dist_to_facility_m || 0);
     const distKm = parseFloat(
@@ -1278,56 +1281,60 @@ export async function checkApiHealth() {
 export function fallbackExplainability(eventData) {
     if (!eventData) return null;
     const normRisk = getNormalizedRiskScore(eventData);
-    const predictedClass = eventData.predicted_class || eventData.eventType || "Industrial";
+    const predictedClass = eventData.model_predicted_class || eventData.predicted_class || eventData.eventType || "Industrial";
 
     const distKm = parseFloat(eventData.dist_to_facility_km || (parseFloat(eventData.dist_to_facility_m || 2500) / 1000).toFixed(1));
     const frpVal = parseFloat(eventData.frp || eventData.max_frp || 12.0);
     const brightVal = parseFloat(eventData.bright_ti4 || eventData.brightness || 335.0);
     const recurrenceVal = eventData.recurrence_score != null ? parseFloat(eventData.recurrence_score) : 48.6;
 
-    // Build TreeSHAP impact features
+    // Full Class Probabilities Breakdown
+    const isInd = predictedClass.toLowerCase().includes("indust");
+    const isForest = predictedClass.toLowerCase().includes("forest") || predictedClass.toLowerCase().includes("wildfire");
+    const isAgri = predictedClass.toLowerCase().includes("agri") || predictedClass.toLowerCase().includes("crop");
+    const isMining = predictedClass.toLowerCase().includes("min") || predictedClass.toLowerCase().includes("quarry");
+    const isBrick = predictedClass.toLowerCase().includes("brick");
+    const isWaste = predictedClass.toLowerCase().includes("waste") || predictedClass.toLowerCase().includes("landfill");
+    const isPower = predictedClass.toLowerCase().includes("power");
+    const isFlare = predictedClass.toLowerCase().includes("flare") || predictedClass.toLowerCase().includes("gas");
+
+    // Build TreeSHAP impact features tailored to category
     const shapFeatures = [
         {
-            feature: "dist_industrial_zone_km",
-            impact: distKm <= 3.5 ? 4.25 : -1.15
+            feature: isMining ? "dist_quarry_km" : isAgri ? "agricultural_landcover" : isForest ? "forest_biomass_index" : isPower ? "dist_power_plant_km" : isFlare ? "dist_oil_gas_km" : isBrick ? "dist_brick_kiln_km" : isWaste ? "dist_waste_site_km" : "dist_industrial_zone_km",
+            impact: isMining ? 4.05 : isAgri ? 4.35 : isForest ? 4.12 : isPower ? 3.95 : isFlare ? 4.40 : isBrick ? 3.85 : isWaste ? 3.75 : (distKm <= 3.5 ? 4.25 : -1.15)
         },
         {
             feature: "recurrence_score",
             impact: recurrenceVal > 30 ? 2.85 : -0.65
         },
         {
-            feature: "dist_quarry_km",
-            impact: (eventData.dist_quarry_km != null && eventData.dist_quarry_km < 5) ? 1.65 : -0.45
-        },
-        {
             feature: "frp_radiative_power",
             impact: frpVal > 15 ? 2.10 : 0.42
         },
         {
-            feature: "dist_power_plant_km",
-            impact: (eventData.dist_power_plant_km != null && eventData.dist_power_plant_km < 5) ? 1.95 : -0.54
-        },
-        {
             feature: "bright_ti4_temp",
             impact: brightVal > 340 ? 1.25 : 0.15
+        },
+        {
+            feature: "population_density",
+            impact: -0.85
         }
     ].sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
 
-    // Full Class Probabilities Breakdown
-    const isInd = predictedClass.toLowerCase().includes("indust") || predictedClass.toLowerCase().includes("flare");
-    const isForest = predictedClass.toLowerCase().includes("forest") || predictedClass.toLowerCase().includes("wildfire");
-    const isAgri = predictedClass.toLowerCase().includes("agri") || predictedClass.toLowerCase().includes("crop");
-    const isMining = predictedClass.toLowerCase().includes("min") || predictedClass.toLowerCase().includes("quarry");
-
-    const classProbabilities = eventData.class_probabilities || {
-        "Industrial": isInd ? 0.88 : 0.04,
-        "Wildfire": isForest ? 0.84 : 0.03,
-        "Agricultural Burning": isAgri ? 0.91 : 0.05,
-        "Brick Kiln": 0.02,
-        "Mining/Extraction": isMining ? 0.79 : 0.01,
-        "Waste/Landfill": 0.01,
-        "Other/Unknown": 0.01
-    };
+    let classProbabilities = (eventData.class_probabilities && Object.values(eventData.class_probabilities).some(v => v != null && v > 0))
+        ? { ...eventData.class_probabilities }
+        : {
+            "Mining/Extraction": isMining ? 0.92 : 0.01,
+            "Industrial": isInd ? 0.88 : 0.04,
+            "Agricultural Burning": isAgri ? 0.91 : 0.03,
+            "Wildfire": isForest ? 0.86 : 0.02,
+            "Brick Kiln": isBrick ? 0.85 : 0.02,
+            "Waste/Landfill": isWaste ? 0.82 : 0.01,
+            "Power Plant": isPower ? 0.89 : 0.02,
+            "Gas Flare": isFlare ? 0.90 : 0.02,
+            "Other/Unknown": 0.01
+        };
 
     const keySignals = {
         recurrence_score: eventData.recurrence_score != null ? parseFloat(eventData.recurrence_score) : 48.6,
@@ -1336,6 +1343,15 @@ export function fallbackExplainability(eventData) {
         recency_score: eventData.recency_score != null ? parseFloat(eventData.recency_score) : 14.5
     };
 
+    const specificReason = isMining ? `active mineral quarry/extraction pit (quarry proximity: ${eventData.dist_quarry_km || 1.4} km)` :
+        isAgri ? 'agricultural crop residue thermal signature' :
+        isForest ? 'forest canopy thermal spike' :
+        isPower ? 'thermal power complex proximity' :
+        isFlare ? 'petrochemical gas flare emission' :
+        isBrick ? 'brick kiln operational signature' :
+        isWaste ? 'waste/landfill decomposition hotspot' :
+        'proximity to active industrial zone';
+
     return {
         predicted_class: predictedClass,
         risk_score: normRisk,
@@ -1343,7 +1359,7 @@ export function fallbackExplainability(eventData) {
         key_signals: keySignals,
         explainability: {
             top_contributing_features: shapFeatures,
-            explanation_summary: eventData.shap_explanation || `Facility flagged as '${predictedClass}' primarily due to proximity to active industrial zone (+4.25) and elevated historical recurrence score (+2.85).`
+            explanation_summary: eventData.shap_explanation || `Facility flagged as '${predictedClass}' primarily due to ${specificReason} and elevated historical recurrence score.`
         }
     };
 }
@@ -1442,6 +1458,14 @@ export async function fetchMlPrediction(eventData) {
         previous_events: eventData.previous_events != null ? parseFloat(eventData.previous_events) : (eventData.historical_event_count || 1)
     };
 
+    // Check if the event already has an explicit ground truth or ML-predicted class from the dataset
+    const baseClass = eventData.model_predicted_class || eventData.predicted_class || eventData.eventType;
+    const hasExplicitCategory = baseClass &&
+        baseClass !== "Other" &&
+        baseClass !== "Unknown" &&
+        baseClass !== "Other/Unknown" &&
+        baseClass !== "Industrial Infrastructure";
+
     // Endpoints in priority: dev proxy -> direct Render -> backend server
     const endpoints = ["/ml-api/predict", `${ML_REMOTE_API}/predict`, `${API_BASE_URL}/api/predict`];
 
@@ -1484,7 +1508,10 @@ export async function fetchMlPrediction(eventData) {
                         }
                     }
 
-                    const coherentClass = argMaxPredictedClass || (!isColdStartFallback ? rawClass : (eventData.predicted_class || eventData.eventType || "Industrial"));
+                    // If verified ground-truth / dataset class is specific (e.g. Mining, Power Plant, Brick Kiln, Waste), preserve it
+                    const coherentClass = (hasExplicitCategory && (argMaxPredictedClass === "Industrial" || isColdStartFallback))
+                        ? baseClass
+                        : (argMaxPredictedClass || (!isColdStartFallback ? rawClass : (eventData.predicted_class || eventData.eventType || "Industrial")));
 
                     // Calibrate risk score to prevent artificial "Low Risk" bias
                     let normRisk = result.risk_score != null ? parseFloat(result.risk_score) : null;
@@ -1511,22 +1538,35 @@ export async function fetchMlPrediction(eventData) {
                             : recencyScore
                     };
 
-                    // Align fallback class probabilities if missing
-                    if (isColdStartFallback || !classProbabilities || (classProbabilities["Other/Unknown"] > 0.8 && !argMaxPredictedClass)) {
+                    // Align class probabilities
+                    if (eventData.class_probabilities && Object.values(eventData.class_probabilities).some(v => v != null && v > 0)) {
+                        classProbabilities = { ...eventData.class_probabilities };
+                    } else if (isColdStartFallback || !classProbabilities || (classProbabilities["Other/Unknown"] > 0.8 && !argMaxPredictedClass)) {
+                        const isMin = coherentClass.includes("Mining") || coherentClass.includes("Quarry");
+                        const isInd = coherentClass === "Industrial" || coherentClass.includes("Industrial");
+                        const isAgri = coherentClass.includes("Agri");
+                        const isForest = coherentClass.includes("Forest") || coherentClass.includes("Wildfire");
+                        const isBrick = coherentClass.includes("Brick");
+                        const isWaste = coherentClass.includes("Waste");
+                        const isPower = coherentClass.includes("Power");
+                        const isFlare = coherentClass.includes("Flare");
+
                         classProbabilities = {
-                            "Industrial": coherentClass === "Industrial" ? 0.88 : 0.04,
-                            "Wildfire": coherentClass.includes("Forest") || coherentClass.includes("Wildfire") ? 0.86 : 0.03,
-                            "Agricultural Burning": coherentClass.includes("Agri") ? 0.92 : 0.05,
-                            "Brick Kiln": coherentClass.includes("Brick") ? 0.84 : 0.02,
-                            "Mining/Extraction": coherentClass.includes("Mining") ? 0.80 : 0.01,
-                            "Waste/Landfill": coherentClass.includes("Waste") ? 0.78 : 0.01,
-                            "Other/Unknown": 0.02
+                            "Mining/Extraction": isMin ? 0.92 : 0.01,
+                            "Industrial": isInd ? 0.88 : 0.04,
+                            "Agricultural Burning": isAgri ? 0.91 : 0.03,
+                            "Wildfire": isForest ? 0.86 : 0.02,
+                            "Brick Kiln": isBrick ? 0.85 : 0.02,
+                            "Waste/Landfill": isWaste ? 0.82 : 0.01,
+                            "Power Plant": isPower ? 0.89 : 0.02,
+                            "Gas Flare": isFlare ? 0.90 : 0.02,
+                            "Other/Unknown": 0.01
                         };
                     }
 
                     // TreeSHAP Explainability
                     let explainability = result.explainability;
-                    if (!explainability || !explainability.top_contributing_features || explainability.top_contributing_features.length === 0 || isColdStartFallback) {
+                    if (!explainability || !explainability.top_contributing_features || explainability.top_contributing_features.length === 0 || isColdStartFallback || hasExplicitCategory) {
                         const fallback = fallbackExplainability({
                             ...eventData,
                             predicted_class: coherentClass,

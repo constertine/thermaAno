@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ContextMap from "../components/ContextMap";
 import RiskScoreGauge from "../components/RiskScoreGauge";
-import { loadEventsData, fetchMlPrediction, getNormalizedRiskScore, getRiskTier } from "../services/dataService";
+import { loadEventsData, fetchMlPrediction, getNormalizedRiskScore, getRiskTier, getEventCategoryColor } from "../services/dataService";
 
 import {
   Flame,
@@ -13,6 +13,9 @@ import {
   Building2,
   Trees,
   Sprout,
+  Pickaxe,
+  Zap,
+  Trash2,
 } from "lucide-react";
 
 const SHAP_FEATURE_DICTIONARY = [
@@ -122,7 +125,7 @@ export default function EventDetail() {
       const pred = await fetchMlPrediction(evt);
       if (pred) {
         setMlData(pred);
-        if (pred.predicted_class) {
+        if (pred.predicted_class && (!currentClassification || currentClassification === "Industrial" || currentClassification === "Unknown")) {
           setCurrentClassification(pred.predicted_class);
         }
       }
@@ -148,20 +151,24 @@ export default function EventDetail() {
               String(e.eventId) === cleanParam ||
               String(e.event_id) === cleanParam ||
               String(e.firmsId) === cleanParam ||
-              String(e.firms_id) === cleanParam ||
-              String(e.grid_key) === cleanParam)
+              String(e.firms_id) === cleanParam)
         );
 
         // If not found by direct string match, try numeric ID / index match
         if (!found && cleanParam) {
           const numericTarget = parseInt(cleanParam.replace(/\D/g, ""), 10);
           if (!isNaN(numericTarget) && numericTarget > 0) {
-            found = events.find((e) => {
+            found = events.find((e, idx) => {
               if (!e) return false;
               const eNum = parseInt(String(e.id || e.eventId || e.firmsId || "").replace(/\D/g, ""), 10);
-              return eNum === numericTarget;
+              return eNum === numericTarget || (idx + 1) === numericTarget;
             });
           }
+        }
+
+        // Only search by grid_key as a last resort if cleanParam is specifically a grid_key format (e.g. 2422_7230)
+        if (!found && cleanParam) {
+          found = events.find((e) => e && String(e.grid_key) === cleanParam);
         }
 
         // Only fallback to events[0] if completely unmatched
@@ -172,12 +179,11 @@ export default function EventDetail() {
         setEvent(found);
 
         if (found) {
-          setCurrentClassification(
-            found.predicted_class || found.eventType || ""
-          );
+          const initialClass = found.model_predicted_class || found.predicted_class || found.eventType || "";
+          setCurrentClassification(initialClass);
           if (found.class_probabilities) {
             setMlData({
-              predicted_class: found.predicted_class,
+              predicted_class: initialClass,
               risk_score: (found.risk_score || found.riskScore || 50) / 100,
               class_probabilities: found.class_probabilities,
               key_signals: found.key_signals
@@ -394,21 +400,34 @@ export default function EventDetail() {
   const facilityScore = parseFloat(event.facility_score || 0);
 
   const getClassIcon = (cls = "") => {
-    const c = cls.toLowerCase();
+    const c = String(cls).toLowerCase();
+    const color = getEventCategoryColor(cls);
 
-    if (c.includes("agri")) {
-      return <Sprout size={22} style={{ color: "#A3E635" }} />;
+    if (c.includes("agri") || c.includes("crop") || c.includes("stubble")) {
+      return <Sprout size={22} style={{ color }} />;
     }
-
-    if (c.includes("forest")) {
-      return <Trees size={22} style={{ color: "#34D399" }} />;
+    if (c.includes("forest") || c.includes("wildfire")) {
+      return <Trees size={22} style={{ color }} />;
     }
-
+    if (c.includes("mining") || c.includes("quarry")) {
+      return <Pickaxe size={22} style={{ color }} />;
+    }
+    if (c.includes("brick")) {
+      return <Building2 size={22} style={{ color }} />;
+    }
+    if (c.includes("power")) {
+      return <Zap size={22} style={{ color }} />;
+    }
+    if (c.includes("flare") || c.includes("gas")) {
+      return <Flame size={22} style={{ color }} />;
+    }
+    if (c.includes("waste") || c.includes("landfill")) {
+      return <Trash2 size={22} style={{ color }} />;
+    }
     if (c.includes("industrial")) {
-      return <Building2 size={22} style={{ color: "#A78BFA" }} />;
+      return <Building2 size={22} style={{ color }} />;
     }
-
-    return <Flame size={22} style={{ color: "#FF9F1C" }} />;
+    return <Flame size={22} style={{ color }} />;
   };
 
   return (
@@ -513,7 +532,7 @@ export default function EventDetail() {
 
               <h2
                 style={{
-                  color: "#A78BFA",
+                  color: getEventCategoryColor(effectiveClass),
                   fontSize: "1.4rem",
                 }}
               >
@@ -534,11 +553,11 @@ export default function EventDetail() {
                 {Object.entries(mlData.class_probabilities)
                   .filter(([_, val]) => val > 0.001 || _ === effectiveClass)
                   .sort(([_, a], [__, b]) => b - a)
-                  .slice(0, 4)
+                  .slice(0, 5)
                   .map(([cls, prob]) => (
                     <div key={cls} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.76rem", marginBottom: "3px" }}>
                       <span className="text-secondary">{cls}</span>
-                      <strong style={{ color: cls === effectiveClass ? "#A78BFA" : "var(--text-primary)" }}>
+                      <strong style={{ color: cls === effectiveClass ? getEventCategoryColor(cls) : "var(--text-primary)" }}>
                         {(prob * 100).toFixed(1)}%
                       </strong>
                     </div>
