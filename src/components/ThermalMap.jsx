@@ -269,18 +269,11 @@ export default function ThermalMap({ events = [], height = '540px', onSelectEven
   // Helper to test if an event is live / real-time
   const isEventLive = (evt) => {
     if (!evt) return false;
-    if (evt.is_live === true || evt.is_flash_trigger || evt.is_early_warning) return true;
-    const evtId = String(evt.eventId || evt.event_id || evt.id || '');
-    if (evtId.includes('LIVE')) return true;
-    const dateStr = String(evt.acq_date || '');
-    if (dateStr === '2026-09-24' || dateStr === new Date().toISOString().split('T')[0]) return true;
-    // Check if within 48h
-    const d = new Date(dateStr);
-    if (!isNaN(d.getTime())) {
-      const diffHours = (Date.now() - d.getTime()) / (1000 * 3600);
-      if (diffHours >= 0 && diffHours <= 48) return true;
-    }
-    return false;
+    return Boolean(
+      evt.is_live === true ||
+      (evt.eventId && String(evt.eventId).includes('LIVE')) ||
+      (evt.id && String(evt.id).includes('LIVE'))
+    );
   };
 
   // Compute live events vs 30-day baseline events
@@ -341,7 +334,7 @@ export default function ThermalMap({ events = [], height = '540px', onSelectEven
             >
               <span className="live-radar-dot"></span>
               <span>🔴 Live Thermal Anomalies</span>
-              <span className="mode-count-pill">({liveEvents.length || displayEvents.length})</span>
+              <span className="mode-count-pill">({liveEvents.length})</span>
             </button>
             <button
               className={`mode-toggle-btn baseline-btn ${mapMode === '30d' ? 'active' : ''}`}
