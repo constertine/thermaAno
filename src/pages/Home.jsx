@@ -540,6 +540,43 @@ export default function Home() {
             grid-template-columns: 1fr;
           }
         }
+
+        @media (max-width: 768px) {
+          .hero-section {
+            padding: 1.5rem 1rem;
+            min-height: auto;
+          }
+          .hero-overlay-card {
+            padding: 1.75rem 1.25rem;
+            border-radius: 28px;
+            max-width: 100%;
+          }
+          .hero-main-heading {
+            font-size: 1.85rem;
+          }
+          .hero-subheading {
+            font-size: 0.95rem;
+            letter-spacing: 0.15em;
+          }
+          .hero-description {
+            font-size: 0.9rem;
+          }
+          .legend-grid, .facility-grid {
+            grid-template-columns: 1fr 1fr;
+          }
+          .map-frame-box {
+            border-radius: 24px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .hero-main-heading {
+            font-size: 1.5rem;
+          }
+          .legend-grid {
+            grid-template-columns: 1fr;
+          }
+        }
       `}</style>
         </div>
     );
