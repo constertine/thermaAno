@@ -68,7 +68,7 @@ export default function Overview() {
 
             <div className="priority-events-list">
               {priorityEvents.map(evt => (
-                <div key={evt.id || evt.eventId} className="priority-item" onClick={() => navigate(`/event/${evt.id || evt.eventId}`)}>
+                <div key={evt.id || evt.eventId} className="priority-item" onClick={() => navigate(`/event/${evt.id || evt.eventId}`, { state: { event: evt } })}>
                   <div className="priority-item-header">
                     <span className="priority-title" style={{ color: evt.risk === 'CRITICAL' ? '#FF3B47' : '#FF9F1C' }}>
                       {evt.predicted_class || evt.eventType || 'Thermal Anomaly'}

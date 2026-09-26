@@ -245,7 +245,7 @@ export default function AllAnomalies() {
                                         <button
                                             className="btn btn-sm btn-secondary"
                                             onClick={() =>
-                                                navigate(`/event/${evt.id}`)
+                                                navigate(`/event/${evt.id || evt.eventId}`, { state: { event: evt } })
                                             }
                                         >
                                             <Eye size={12} />

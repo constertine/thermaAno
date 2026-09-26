@@ -195,7 +195,7 @@ function ThermalEventsRenderer({
                     </button>
                     <button
                       className="btn btn-sm btn-secondary full-w"
-                      onClick={() => navigate(`/event/${evt.id || evt.eventId}`)}
+                      onClick={() => navigate(`/event/${evt.id || evt.eventId}`, { state: { event: evt } })}
                     >
                       <Eye size={12} />
                       <span>Multi-Sensor Deep Analysis</span>
@@ -379,7 +379,7 @@ export default function ThermalMap({ events = [], height = '540px', onSelectEven
         maxZoom={18}
         scrollWheelZoom={true}
         preferCanvas={true}
-        style={{ width: '100%', height: 'calc(100% - 46px)', background: 'var(--page-bg)' }}
+        style={{ width: '100%', flex: 1, minHeight: 0, background: 'var(--page-bg)' }}
       >
         <TileLayer
           attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; NASA FIRMS & ISRO MOSDAC'
@@ -424,13 +424,20 @@ export default function ThermalMap({ events = [], height = '540px', onSelectEven
         .thermal-map-container {
           position: relative;
           width: 100%;
+          display: flex;
+          flex-direction: column;
           border: 1px solid var(--border);
           border-radius: 4px;
           overflow: hidden;
           background-color: var(--surface);
         }
 
+        .satellite-telemetry-bar {
+          flex-shrink: 0;
+        }
+
         .map-toolbar {
+          flex-shrink: 0;
           min-height: 46px;
           background: var(--surface);
           border-bottom: 1px solid var(--border);

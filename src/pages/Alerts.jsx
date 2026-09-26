@@ -231,7 +231,7 @@ export default function Alerts() {
                       <span className="badge badge-warning">⚡ FLASH TRIGGER</span>
                     )}
                     <span className={`badge badge-${alert.risk.toLowerCase()}`}>{alert.risk}</span>
-                    <button className="btn btn-sm btn-secondary" onClick={() => navigate(`/event/${alert.id || alert.eventId}`)}>
+                    <button className="btn btn-sm btn-secondary" onClick={() => navigate(`/event/${alert.id || alert.eventId}`, { state: { event: alert } })}>
                       <Eye size={14} />
                       <span>Inspect</span>
                     </button>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ContextMap from "../components/ContextMap";
 import RiskScoreGauge from "../components/RiskScoreGauge";
 import { loadEventsData, fetchMlPrediction, getNormalizedRiskScore, getRiskTier, getEventCategoryColor } from "../services/dataService";
@@ -107,16 +107,30 @@ const SHAP_FEATURE_DICTIONARY = [
 export default function EventDetail() {
   const { eventId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const preloadedEvent = location.state?.event;
 
-  const [event, setEvent] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [event, setEvent] = useState(preloadedEvent || null);
+  const [loading, setLoading] = useState(!preloadedEvent);
   const [isPredicting, setIsPredicting] = useState(false);
-  const [mlData, setMlData] = useState(null);
+  const [mlData, setMlData] = useState(() => {
+    if (preloadedEvent?.class_probabilities) {
+      return {
+        predicted_class: preloadedEvent.model_predicted_class || preloadedEvent.predicted_class || preloadedEvent.eventType,
+        risk_score: (preloadedEvent.risk_score || preloadedEvent.riskScore || 50) / 100,
+        class_probabilities: preloadedEvent.class_probabilities,
+        key_signals: preloadedEvent.key_signals
+      };
+    }
+    return null;
+  });
 
   // Human-in-the-loop verification state
   const [verificationState, setVerificationState] = useState(null);
   const [isChangingClass, setIsChangingClass] = useState(false);
-  const [currentClassification, setCurrentClassification] = useState("");
+  const [currentClassification, setCurrentClassification] = useState(() => {
+    return preloadedEvent?.model_predicted_class || preloadedEvent?.predicted_class || preloadedEvent?.eventType || "";
+  });
 
   const fetchLiveMlPrediction = async (evt) => {
     if (!evt) return;
@@ -125,7 +139,7 @@ export default function EventDetail() {
       const pred = await fetchMlPrediction(evt);
       if (pred) {
         setMlData(pred);
-        if (pred.predicted_class && (!currentClassification || currentClassification === "Industrial" || currentClassification === "Unknown")) {
+        if (pred.predicted_class) {
           setCurrentClassification(pred.predicted_class);
         }
       }
@@ -138,6 +152,10 @@ export default function EventDetail() {
 
   useEffect(() => {
     let mounted = true;
+
+    if (preloadedEvent) {
+      fetchLiveMlPrediction(preloadedEvent);
+    }
 
     loadEventsData()
       .then((events) => {
@@ -171,25 +189,24 @@ export default function EventDetail() {
           found = events.find((e) => e && String(e.grid_key) === cleanParam);
         }
 
-        // Only fallback to events[0] if completely unmatched
-        if (!found && events.length > 0) {
-          found = events[0];
-        }
+        // If not found in loaded events, keep preloadedEvent instead of blindly defaulting to events[0]
+        const resolvedEvent = found || preloadedEvent || (events.length > 0 ? events[0] : null);
 
-        setEvent(found);
-
-        if (found) {
-          const initialClass = found.model_predicted_class || found.predicted_class || found.eventType || "";
+        if (resolvedEvent) {
+          setEvent(resolvedEvent);
+          const initialClass = resolvedEvent.model_predicted_class || resolvedEvent.predicted_class || resolvedEvent.eventType || "";
           setCurrentClassification(initialClass);
-          if (found.class_probabilities) {
+          if (resolvedEvent.class_probabilities) {
             setMlData({
               predicted_class: initialClass,
-              risk_score: (found.risk_score || found.riskScore || 50) / 100,
-              class_probabilities: found.class_probabilities,
-              key_signals: found.key_signals
+              risk_score: (resolvedEvent.risk_score || resolvedEvent.riskScore || 50) / 100,
+              class_probabilities: resolvedEvent.class_probabilities,
+              key_signals: resolvedEvent.key_signals
             });
           }
-          fetchLiveMlPrediction(found);
+          if (!preloadedEvent) {
+            fetchLiveMlPrediction(resolvedEvent);
+          }
         }
 
         setLoading(false);
@@ -199,7 +216,7 @@ export default function EventDetail() {
 
         if (mounted) {
           setLoading(false);
-          setEvent(null);
+          if (!preloadedEvent) setEvent(null);
         }
       });
 

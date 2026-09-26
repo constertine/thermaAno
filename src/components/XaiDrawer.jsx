@@ -622,7 +622,7 @@ export default function XaiDrawer({ event, onClose, onRefreshEvent }) {
                     <button
                         type="button"
                         className="btn-full-analysis"
-                        onClick={() => navigate(`/event/${event.id || event.eventId}`)}
+                        onClick={() => navigate(`/event/${event.id || event.eventId}`, { state: { event } })}
                     >
                         <span>Open Multi-Sensor Event Intelligence</span>
                         <ExternalLink size={14} />
