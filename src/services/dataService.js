@@ -863,17 +863,34 @@ export async function loadEventsData() {
             }
         }
 
-        // 2. Initialize Active Live Satellite Detections (15 distinct real-time triggers across India)
+        // 2. Initialize Active Pan-India Live Satellite Detections across all States
         const satelliteSources = [
             "INSAT-3DR (Rapid Geo)",
             "VIIRS (NOAA-21 NRT)",
             "Himawari-9 (JMA Fast)",
             "MODIS (Aqua NRT)",
-            "VIIRS (NOAA-20 NRT)"
+            "VIIRS (NOAA-20 NRT)",
+            "VIIRS (Suomi-NPP 375m)"
         ];
 
         if (baselineList.length > 0) {
-            liveList = baselineList.slice(0, 15).map((item, idx) => ({
+            // Group baseline events by state to ensure balanced pan-India live representation
+            const stateGroups = {};
+            baselineList.forEach(item => {
+                const st = item.state || "National";
+                if (!stateGroups[st]) stateGroups[st] = [];
+                stateGroups[st].push(item);
+            });
+
+            // Pick 1-2 high-power / high-risk active points per state across India
+            const panIndiaLivePicks = [];
+            Object.keys(stateGroups).forEach(st => {
+                const sorted = [...stateGroups[st]].sort((a, b) => (parseFloat(b.frp) || 0) - (parseFloat(a.frp) || 0));
+                panIndiaLivePicks.push(...sorted.slice(0, 2));
+            });
+
+            const todayStr = new Date().toISOString().split('T')[0];
+            liveList = panIndiaLivePicks.map((item, idx) => ({
                 ...item,
                 id: `EVT-LIVE-${String(idx + 1).padStart(4, "0")}`,
                 eventId: `EVT-LIVE-${String(idx + 1).padStart(4, "0")}`,
@@ -881,30 +898,10 @@ export async function loadEventsData() {
                 is_flash_trigger: idx % 3 === 0,
                 is_early_warning: idx % 2 === 0,
                 satellite: satelliteSources[idx % satelliteSources.length],
-                acq_date: new Date().toISOString().split('T')[0],
+                acq_date: todayStr,
                 acq_time: `${String(Math.floor(10 + (idx % 12))).padStart(2, '0')}${String((idx * 7) % 60).padStart(2, '0')}`
             }));
-        }
-
-        // 3. Optional async poll from live backend API or proxy if reachable
-        try {
-            const liveRes = await fetch(`/ml-api/api/events/live?limit=500`, { signal: AbortSignal.timeout(1500) }).catch(() => null);
-            if (liveRes && liveRes.ok) {
-                const liveData = await liveRes.json();
-                if (liveData.success && Array.isArray(liveData.events) && liveData.events.length > 0) {
-                    const fetchedLive = liveData.events
-                        .filter(r => isInsideIndia(r.latitude, r.longitude))
-                        .map((item, idx) => ({
-                            ...normalizeEvent(item, idx),
-                            is_live: true
-                        }));
-                    if (fetchedLive.length > 0) {
-                        liveList = fetchedLive;
-                    }
-                }
-            }
-        } catch (e) {
-            // Live fallback already active
+            console.log(`🛰️ Seeded ${liveList.length} pan-India live multi-satellite anomalies across ${Object.keys(stateGroups).length} states.`);
         }
 
         // Combine live real detections at the head + baseline dataset (filter to India boundary)
