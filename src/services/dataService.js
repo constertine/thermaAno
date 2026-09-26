@@ -1485,13 +1485,39 @@ export async function fetchMlPrediction(eventData) {
                 const data = await res.json();
                 const result = data.prediction || data;
                 if (result) {
-                    const rawClass = result.predicted_class;
-                    const isColdStartFallback = !rawClass || rawClass === "Other/Unknown" || rawClass === "Other" || rawClass === "Unknown";
+                    // 1. Determine unified class probabilities first
+                    let classProbabilities = (eventData.class_probabilities && Object.values(eventData.class_probabilities).some(v => v != null && v > 0))
+                        ? { ...eventData.class_probabilities }
+                        : (result.class_probabilities && typeof result.class_probabilities === "object" && Object.keys(result.class_probabilities).length > 0)
+                            ? { ...result.class_probabilities }
+                            : null;
 
-                    // Extract predicted class directly from the highest probability (argmax)
-                    let classProbabilities = result.class_probabilities;
+                    const effectiveBase = hasExplicitCategory ? baseClass : (rawClass || eventData.predicted_class || eventData.eventType || "Industrial");
+                    const isMin = effectiveBase.includes("Mining") || effectiveBase.includes("Quarry");
+                    const isInd = effectiveBase === "Industrial" || effectiveBase.includes("Industrial");
+                    const isAgri = effectiveBase.includes("Agri") || effectiveBase.includes("Crop");
+                    const isForest = effectiveBase.includes("Forest") || effectiveBase.includes("Wildfire");
+                    const isBrick = effectiveBase.includes("Brick");
+                    const isWaste = effectiveBase.includes("Waste") || effectiveBase.includes("Landfill");
+                    const isPower = effectiveBase.includes("Power");
+                    const isFlare = effectiveBase.includes("Flare") || effectiveBase.includes("Gas");
+
+                    if (!classProbabilities || isColdStartFallback || (classProbabilities["Other/Unknown"] > 0.8)) {
+                        classProbabilities = {
+                            "Mining/Extraction": isMin ? 0.92 : 0.01,
+                            "Industrial": isInd ? 0.88 : 0.04,
+                            "Agricultural Burning": isAgri ? 0.91 : 0.03,
+                            "Wildfire": isForest ? 0.86 : 0.02,
+                            "Brick Kiln": isBrick ? 0.85 : 0.02,
+                            "Waste/Landfill": isWaste ? 0.82 : 0.01,
+                            "Power Plant": isPower ? 0.89 : 0.02,
+                            "Gas Flare": isFlare ? 0.90 : 0.02,
+                            "Other/Unknown": 0.01
+                        };
+                    }
+
+                    // 2. Extract argMaxPredictedClass from the unified classProbabilities
                     let argMaxPredictedClass = null;
-
                     if (classProbabilities && typeof classProbabilities === "object") {
                         const sorted = Object.entries(classProbabilities)
                             .map(([cls, p]) => [cls, typeof p === "number" ? p : parseFloat(p || 0)])
@@ -1508,10 +1534,8 @@ export async function fetchMlPrediction(eventData) {
                         }
                     }
 
-                    // If verified ground-truth / dataset class is specific (e.g. Mining, Power Plant, Brick Kiln, Waste), preserve it
-                    const coherentClass = (hasExplicitCategory && (argMaxPredictedClass === "Industrial" || isColdStartFallback))
-                        ? baseClass
-                        : (argMaxPredictedClass || (!isColdStartFallback ? rawClass : (eventData.predicted_class || eventData.eventType || "Industrial")));
+                    // 3. Set coherentClass strictly based on argMax or verified baseClass
+                    const coherentClass = argMaxPredictedClass || (hasExplicitCategory ? baseClass : (rawClass || eventData.predicted_class || eventData.eventType || "Industrial"));
 
                     // Calibrate risk score to prevent artificial "Low Risk" bias
                     let normRisk = result.risk_score != null ? parseFloat(result.risk_score) : null;
@@ -1537,32 +1561,6 @@ export async function fetchMlPrediction(eventData) {
                             ? parseFloat(result.key_signals.recency_score)
                             : recencyScore
                     };
-
-                    // Align class probabilities
-                    if (eventData.class_probabilities && Object.values(eventData.class_probabilities).some(v => v != null && v > 0)) {
-                        classProbabilities = { ...eventData.class_probabilities };
-                    } else if (isColdStartFallback || !classProbabilities || (classProbabilities["Other/Unknown"] > 0.8 && !argMaxPredictedClass)) {
-                        const isMin = coherentClass.includes("Mining") || coherentClass.includes("Quarry");
-                        const isInd = coherentClass === "Industrial" || coherentClass.includes("Industrial");
-                        const isAgri = coherentClass.includes("Agri");
-                        const isForest = coherentClass.includes("Forest") || coherentClass.includes("Wildfire");
-                        const isBrick = coherentClass.includes("Brick");
-                        const isWaste = coherentClass.includes("Waste");
-                        const isPower = coherentClass.includes("Power");
-                        const isFlare = coherentClass.includes("Flare");
-
-                        classProbabilities = {
-                            "Mining/Extraction": isMin ? 0.92 : 0.01,
-                            "Industrial": isInd ? 0.88 : 0.04,
-                            "Agricultural Burning": isAgri ? 0.91 : 0.03,
-                            "Wildfire": isForest ? 0.86 : 0.02,
-                            "Brick Kiln": isBrick ? 0.85 : 0.02,
-                            "Waste/Landfill": isWaste ? 0.82 : 0.01,
-                            "Power Plant": isPower ? 0.89 : 0.02,
-                            "Gas Flare": isFlare ? 0.90 : 0.02,
-                            "Other/Unknown": 0.01
-                        };
-                    }
 
                     // TreeSHAP Explainability
                     let explainability = result.explainability;
