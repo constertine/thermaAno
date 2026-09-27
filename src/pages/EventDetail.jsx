@@ -405,9 +405,49 @@ export default function EventDetail() {
       ? "MEDIUM"
       : "LOW";
 
-  const effectiveConfidence = Math.round(
-    parseFloat(event.prediction_confidence) || 85
-  );
+  const effectiveConfidence = (() => {
+    // 1. If mlData has class_probabilities for effectiveClass
+    if (mlData?.class_probabilities && mlData.class_probabilities[effectiveClass] != null) {
+      const p = parseFloat(mlData.class_probabilities[effectiveClass]);
+      if (!isNaN(p) && p > 0) return Math.min(100, Math.max(1, Math.round(p <= 1.0 ? p * 100 : p)));
+    }
+    // 2. If mlData has prediction_confidence
+    if (mlData?.prediction_confidence != null) {
+      const p = parseFloat(mlData.prediction_confidence);
+      if (!isNaN(p) && p > 0) return Math.min(100, Math.max(1, Math.round(p <= 1.0 ? p * 100 : p)));
+    }
+    // 3. If event has prediction_confidence
+    if (event.prediction_confidence != null && !isNaN(parseFloat(event.prediction_confidence))) {
+      const p = parseFloat(event.prediction_confidence);
+      if (p > 0) return Math.min(100, Math.max(1, Math.round(p <= 1.0 ? p * 100 : p)));
+    }
+    // 4. If event has label_confidence or confidence_numeric
+    if (event.label_confidence != null && !isNaN(parseFloat(event.label_confidence))) {
+      const p = parseFloat(event.label_confidence);
+      if (p > 0) return Math.min(100, Math.max(1, Math.round(p <= 1.0 ? p * 100 : p)));
+    }
+    if (event.confidence_numeric != null && !isNaN(parseFloat(event.confidence_numeric))) {
+      const p = parseFloat(event.confidence_numeric);
+      if (p > 0) return Math.min(100, Math.max(1, Math.round(p <= 1.0 ? p * 100 : p)));
+    }
+    // 5. If event has string confidence like "92%" or "nominal"
+    if (event.confidence) {
+      const parsed = parseFloat(String(event.confidence).replace('%', ''));
+      if (!isNaN(parsed) && parsed > 0) return Math.min(100, Math.max(1, Math.round(parsed)));
+      const lower = String(event.confidence).toLowerCase();
+      if (lower.includes('high')) return 92;
+      if (lower.includes('nominal')) return 75;
+      if (lower.includes('low')) return 52;
+    }
+    return 88;
+  })();
+
+  const formatPercentSignal = (val, fallback = "N/A") => {
+    if (val == null || val === "" || isNaN(Number(val))) return fallback;
+    const num = parseFloat(val);
+    const normalized = num <= 1.0 ? num * 100 : num;
+    return `${Math.min(100, Math.max(0, Math.round(normalized)))}%`;
+  };
 
   const maxFrp = parseFloat(event.max_frp || event.frp || 0);
   const meanFrp = parseFloat(event.mean_frp || event.frp || 0);
@@ -587,11 +627,11 @@ export default function EventDetail() {
               <div className="ml-signals-row margin-top" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", fontSize: "0.74rem" }}>
                 <div style={{ background: "var(--elevated)", padding: "6px 8px", borderRadius: "8px" }}>
                   <span className="text-secondary">Recurrence: </span>
-                  <strong>{mlData.key_signals.recurrence_score != null ? (mlData.key_signals.recurrence_score * 100).toFixed(0) + "%" : "N/A"}</strong>
+                  <strong>{formatPercentSignal(mlData.key_signals.recurrence_score)}</strong>
                 </div>
                 <div style={{ background: "var(--elevated)", padding: "6px 8px", borderRadius: "8px" }}>
                   <span className="text-secondary">Trend Score: </span>
-                  <strong>{mlData.key_signals.trend_score != null ? (mlData.key_signals.trend_score * 100).toFixed(0) + "%" : "50%"}</strong>
+                  <strong>{formatPercentSignal(mlData.key_signals.trend_score, "50%")}</strong>
                 </div>
               </div>
             )}

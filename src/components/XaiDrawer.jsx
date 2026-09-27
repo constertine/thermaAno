@@ -230,6 +230,35 @@ export default function XaiDrawer({ event, onClose, onRefreshEvent }) {
         : (keySignals.recency_score != null && keySignals.recency_score > 0 ? parseFloat(keySignals.recency_score) : null);
     const recencyScore = rawRecency != null ? rawRecency : 14.5;
 
+    // Dynamic confidence calculation
+    const drawerConfidence = (() => {
+        if (predictionData?.class_probabilities && predictionData.class_probabilities[predictedClass] != null) {
+            const p = parseFloat(predictionData.class_probabilities[predictedClass]);
+            if (!isNaN(p) && p > 0) return Math.min(100, Math.max(1, Math.round(p <= 1.0 ? p * 100 : p)));
+        }
+        if (predictionData?.prediction_confidence != null) {
+            const p = parseFloat(predictionData.prediction_confidence);
+            if (!isNaN(p) && p > 0) return Math.min(100, Math.max(1, Math.round(p <= 1.0 ? p * 100 : p)));
+        }
+        if (event.prediction_confidence != null && !isNaN(parseFloat(event.prediction_confidence))) {
+            const p = parseFloat(event.prediction_confidence);
+            if (p > 0) return Math.min(100, Math.max(1, Math.round(p <= 1.0 ? p * 100 : p)));
+        }
+        if (event.confidence_numeric != null && !isNaN(parseFloat(event.confidence_numeric))) {
+            const p = parseFloat(event.confidence_numeric);
+            if (p > 0) return Math.min(100, Math.max(1, Math.round(p <= 1.0 ? p * 100 : p)));
+        }
+        if (event.confidence) {
+            const parsed = parseFloat(String(event.confidence).replace('%', ''));
+            if (!isNaN(parsed) && parsed > 0) return Math.min(100, Math.max(1, Math.round(parsed)));
+            const lower = String(event.confidence).toLowerCase();
+            if (lower.includes('high')) return 92;
+            if (lower.includes('nominal')) return 75;
+            if (lower.includes('low')) return 52;
+        }
+        return 88;
+    })();
+
     // Dynamic re-query trigger
     const handleRequery = async () => {
         setIsLoading(true);
@@ -321,7 +350,7 @@ export default function XaiDrawer({ event, onClose, onRefreshEvent }) {
                     <div className="telemetry-item">
                         <ShieldAlert size={13} className="text-warning" />
                         <span className="label">Confidence:</span>
-                        <strong className="mono val">{event.confidence || "92%"}</strong>
+                        <strong className="mono val">{drawerConfidence}%</strong>
                     </div>
                 </div>
 
@@ -342,9 +371,7 @@ export default function XaiDrawer({ event, onClose, onRefreshEvent }) {
                         <div className="confidence-meter-card">
                             <span className="meter-label">Model Confidence</span>
                             <span className="meter-val mono">
-                                {predictionData?.prediction_confidence
-                                    ? `${predictionData.prediction_confidence}%`
-                                    : event.confidence || "94%"}
+                                {drawerConfidence}%
                             </span>
                             <span className="meter-engine-pill">FastAPI • XGBoost + SHAP</span>
                         </div>
