@@ -5,11 +5,11 @@ export default function Footer() {
     <footer className="global-footer">
       <div className="footer-container">
         <div className="footer-title">THERMAL ANOMALY MONITORING</div>
-        <div className="footer-sub text-secondary">Observing Fire. Understanding Risk. Across The Globe.</div>
+        <div className="footer-sub text-secondary">Observing Fire. Understanding Risk. Across India.</div>
 
         <div className="footer-bottom text-secondary" style={{ marginTop: '1.25rem' }}>
-          <div>© 2026 Global Thermal Anomaly Intelligence</div>
-          <div>Satellite Data · Anomaly Detection · Global Coverage</div>
+          <div>© 2026 Thermal Anomaly Intelligence</div>
+          <div>Satellite Data · Anomaly Detection · Geospatial AI</div>
         </div>
       </div>
 
